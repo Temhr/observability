@@ -120,20 +120,6 @@
 
 Every host runs its own Prometheus, Alertmanager, ntfy, Loki, Alloy and Grafana. `hosts--profl--base` imports `stack--observability` and enables it on every host; hosts differ only in hardware and per-host overrides.
 
-**Host facts that affect observability**
-
-| Host | Address | nixpkgs | Battery | Drives | ZFS |
-|---|---|---|---|---|---|
-| nixnas1 | 10.0.0.251 | stable | none | NVMe + SAS/SCSI | pool `tanks` |
-| nixnas2 | 10.0.0.252 | stable | none | ATA | no |
-| nixace | 10.0.0.200 | unstable | BAT0 | NVMe + ATA | no |
-| nixsun | 10.0.0.201 | unstable | BAT0 | ATA | no |
-| nixtop | 10.0.0.202 | unstable | BAT0 | ATA | no |
-| nixvat | 10.0.0.203 | unstable | none (Logitech `hidpp_battery_0` only) | ATA | no |
-| nixzen | 10.0.0.204 | unstable | BAT0 | ATA | no |
-
-Common: gateway 10.0.0.1, /24, DNS 9.9.9.9 + 1.1.1.1. `nvidia-smi` segfaults on the five GPU hosts, so there is no GPU exporter. Most hosts have both a wired and a Wi-Fi interface and several route through Wi-Fi, which is why exposure is by named wired interface.
-
 **Consequences baked into the code**
 - SAS/SCSI drives (nixnas1) expose `smartctl_scsi_*` rather than ATA attributes, hence the separate SCSI alert rules.
 - Battery, ZFS, NVMe and fan alerts match nothing on hosts without those sensors; they simply never fire.
