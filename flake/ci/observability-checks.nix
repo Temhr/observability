@@ -1,6 +1,7 @@
 # Build-time validation of the observability stack's generated configuration.
 {
   self,
+  inputs,
   lib,
   ...
 }: {
@@ -9,7 +10,7 @@
     system,
     ...
   }: let
-    inherit (self.lib) prometheusRendered prometheusMaintenanceAlerts;
+    inherit (self.lib) prometheusMaintenanceAlerts;
     toJson = name: value: pkgs.writeText name (builtins.toJSON value);
     tools = [pkgs.prometheus.cli pkgs.prometheus-alertmanager pkgs.remarshal pkgs.gettext];
     allFeatures = {
@@ -21,36 +22,28 @@
       blackboxProbes = true;
       alertmanagerWired = true;
     };
-
-    # One host per nixpkgs channel is validated (see hosts-meta.nix): nixnas1 (stable), nixsun (unstable).
-    perHost = host: let
-      hostConfig = self.nixosConfigurations.${host}.config;
-      rendered = prometheusRendered {
-        config = hostConfig;
-        lib = pkgs.lib;
+    harness = import ./_harness {inherit inputs self;};
+    hosts = {
+      stable = harness.mkTestHost {modules = [harness.fullStack];};
+      unstable = harness.mkTestHost {
+        nixpkgs = inputs.nixpkgs-unstable;
+        modules = [harness.fullStack];
       };
-    in {
-      "prom-config-${host}" = pkgs.runCommand "prom-config-${host}" {nativeBuildInputs = tools;} ''
-        remarshal -i ${toJson "prometheus.json" rendered.prometheusConfig} -if json -of yaml -o prometheus.yml
-        promtool check config --syntax-only prometheus.yml
-        touch $out
-      '';
-      "prom-rules-${host}" = pkgs.runCommand "prom-rules-${host}" {nativeBuildInputs = tools;} ''
-        remarshal -i ${toJson "rules.json" rendered.rules} -if json -of yaml -o rules.yml
-        promtool check rules rules.yml
-        touch $out
-      '';
-      "alertmanager-config-${host}" = pkgs.runCommand "alertmanager-config-${host}" {nativeBuildInputs = tools;} ''
-        remarshal -i ${toJson "am.json" hostConfig.services.prometheus.alertmanager.configuration} -if json -of yaml -o am.yml
-        for v in $(grep -o '\$[A-Z_][A-Z0-9_]*' am.yml | tr -d '$' | sort -u); do export "$v=dummy"; done
-        envsubst < am.yml > am.sub.yml
-        amtool check-config am.sub.yml
-        touch $out
-      '';
+      minimal = harness.mkTestHost {modules = [harness.minimalStack];};
     };
   in {
     checks = lib.optionalAttrs (system == "x86_64-linux") (
-      (lib.foldl' (acc: host: acc // perHost host) {} ["nixnas1" "nixsun"])
+      (lib.foldl' (acc: name:
+        acc
+        // self.lib.observabilityHostChecks {
+          inherit pkgs name;
+          hostConfig = hosts.${name}.config;
+        }) {} ["stable" "unstable"])
+      // {
+        # Whole-system evaluation + build of each harness host.
+        toplevel-stable = hosts.stable.config.system.build.toplevel;
+        toplevel-minimal = hosts.minimal.config.system.build.toplevel;
+      }
       // {
         # Every alert needs docs/runbooks/<Alert>.md, unless it is listed in docs/runbooks/_todo.txt.
         runbook-coverage = pkgs.runCommand "runbook-coverage" {nativeBuildInputs = [pkgs.jq];} ''
