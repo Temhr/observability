@@ -1,8 +1,7 @@
-{...}: {
+{self, ...}: {
   flake.nixosModules.nsops--grafana = {
     config,
     lib,
-    self,
     ...
   }: let
     cfg = config.services.grafana-nixlab;
@@ -11,11 +10,9 @@
 
     options.services.grafana-nixlab.secretsFile = lib.mkOption {
       type = lib.types.path;
-      default = ./grafana.yaml;
-      defaultText = lib.literalExpression "./grafana.yaml";
       description = ''
         Path to the sops-encrypted grafana secrets file.
-        Defaults to grafana.yaml co-located with this module.
+        Required when the service is enabled; supplied by the consumer (the encrypted file is not part of this repository).
         Override per-host if needed.
       '';
     };

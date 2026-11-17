@@ -1,8 +1,7 @@
-{...}: {
+{self, ...}: {
   flake.nixosModules.nsops--alertmanager = {
     config,
     lib,
-    self,
     ...
   }: let
     cfg = config.services.alertmanager-nixlab;
@@ -10,11 +9,9 @@
     imports = [self.nixosModules.servc--alertmanager-nixlab];
     options.services.alertmanager-nixlab.secretsFile = lib.mkOption {
       type = lib.types.path;
-      default = ./alertmanager.env;
-      defaultText = lib.literalExpression "./alertmanager.env";
       description = ''
         Path to the sops-encrypted alertmanager secrets file.
-        Defaults to alertmanager.env co-located with this module.
+        Required when the service is enabled; supplied by the consumer (the encrypted file is not part of this repository).
         Override per-host if needed.
 
         The decrypted file is rendered as KEY=VALUE pairs and injected

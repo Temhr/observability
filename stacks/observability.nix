@@ -3,6 +3,7 @@
     config,
     lib,
     hostMeta ? {},
+    allHosts ? {}, # M2-REMOVE (S2)
     ...
   }: let
     cfg = config.services.nixlab-observability;
@@ -30,11 +31,6 @@
       else if cfg.access.interfaces != [] && lib.elem name cfg.access.expose
       then "0.0.0.0"
       else "127.0.0.1";
-
-    registry = self.lib.serviceRegistry {inherit config;};
-    registryTcpTargets =
-      lib.mapAttrsToList (_: e: "127.0.0.1:${toString e.port}")
-      (lib.filterAttrs (k: _: registry.enabled.${k} or false) (registry.endpoints or {}));
 
     # Alloy pipeline for the maintenance log.
     maintenanceAlloyConfig = ''
@@ -233,6 +229,13 @@
           type = lib.types.bool;
           default = true;
           description = "TCP-probe the loopback ports of the services enabled on this host (from the service registry).";
+        };
+        tcpTargets = lib.mkOption {
+          # M2-REMOVE (S4): filled by the nixlab adapter from the homepage service registry.
+          type = lib.types.listOf lib.types.str;
+          default = [];
+          example = ["127.0.0.1:8123"];
+          description = "host:port TCP probe targets used when tcpFromRegistry is true.";
         };
       };
 
@@ -527,9 +530,9 @@
         icmpTargets = lib.mkDefault (
           lib.optional (cfg.probes.gateway != null) cfg.probes.gateway
           ++ lib.filter (a: a != (hostMeta.address or ""))
-          (map (h: self.lib.hostsMeta.${h}.address) cfg.probes.hosts)
+          (map (h: allHosts.${h}.address) cfg.probes.hosts)
         );
-        tcpTargets = lib.mkIf cfg.probes.tcpFromRegistry (lib.mkDefault registryTcpTargets);
+        tcpTargets = lib.mkIf cfg.probes.tcpFromRegistry (lib.mkDefault cfg.probes.tcpTargets);
       };
 
       services.loki-nixlab.ruler = {

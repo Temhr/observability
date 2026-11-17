@@ -291,7 +291,7 @@ Conventions: **Unit** = systemd unit; **State** = on-disk state; **Hardening** =
 - `alerting.alertmanagers`: one static config when `alertmanagerTargets != []`.
 - `rule_files: ["<dataDir>/rules/*.yml"]`.
 - `scrape_configs` (see below).
-- Rules: `core` groups ++ (if `maintenance.enable`) `maintenance` groups. Rendered with `runbookBase = https://github.com/Temhr/nixlab/blob/main/docs/runbooks` and the `condition` label on.
+- Rules: `core` groups ++ (if `maintenance.enable`) `maintenance` groups. Rendered with `runbookBase = https://github.com/Temhr/observability/blob/main/docs/runbooks` and the `condition` label on.
 
 **Scrape jobs** (`scrape-configs.nix`)
 
