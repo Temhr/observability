@@ -160,8 +160,8 @@
     allTopics = [cfg.notifications.ntfyTopic] ++ map topicName (lib.attrNames cfg.notifications.topics);
   in {
     imports = [
-      self.nixosModules.nsops--alertmanager
-      self.nixosModules.nsops--grafana
+      self.nixosModules.servc--alertmanager-nixlab
+      self.nixosModules.servc--grafana-nixlab
       self.nixosModules.servc--alloy-nixlab
       self.nixosModules.servc--loki-nixlab
       self.nixosModules.servc--prometheus-nixlab
@@ -325,6 +325,15 @@
           description = "Use ntfy message templating so notifications show alert summary/description instead of raw JSON. Requires ntfy >= 2.10.";
         };
         ntfyAuth.enable = lib.mkEnableOption "ntfy authentication with an Alertmanager writer and a reader account (needs NTFY_*_PASSWORD in the alertmanager secrets file)";
+        ntfyAuth.environmentFile = lib.mkOption {
+          type = lib.types.nullOr lib.types.path;
+          default = config.services.alertmanager-nixlab.environmentFile;
+          defaultText = lib.literalExpression "config.services.alertmanager-nixlab.environmentFile";
+          description = ''
+            File of KEY=VALUE lines read by ntfy-provision (NTFY_ALERTMANAGER_PASSWORD and friends).
+            Defaults to the Alertmanager environment file; both need the same credentials.
+          '';
+        };
         separateCritical = lib.mkOption {
           type = lib.types.bool;
           default = true;
@@ -386,6 +395,14 @@
         {
           assertion = lib.all (n: builtins.match "[A-Za-z0-9_-]+" n != null) (lib.attrNames cfg.notifications.topics);
           message = "services.nixlab-observability.notifications.topics: names may only contain letters, digits, '-' and '_'.";
+        }
+        {
+          assertion = cfg.notifications.ntfyAuth.enable -> (cfg.notifications.ntfyAuth.environmentFile != null);
+          message = "services.nixlab-observability.notifications.ntfyAuth.enable needs notifications.ntfyAuth.environmentFile (it defaults to services.alertmanager-nixlab.environmentFile). Provide a file containing the NTFY_*_PASSWORD variables.";
+        }
+        {
+          assertion = lib.all (i: i != "") cfg.access.interfaces;
+          message = "services.nixlab-observability.access.interfaces must not contain empty interface names. Remove interfaces this machine does not have (for example a missing Wi-Fi device) before passing the list.";
         }
       ];
 
@@ -493,14 +510,10 @@
         allowedTCPPorts = map (name: port.${name}) cfg.access.expose;
       });
 
-      # ntfy-provision writes these passwords into ntfy's user database, so a rotated
-      # secret has to re-run it.
-      sops.secrets.ALERTMANAGER_ENV.restartUnits = lib.mkIf cfg.notifications.ntfyAuth.enable ["ntfy-provision.service"];
-
       services.ntfy-nixlab.auth = lib.mkIf cfg.notifications.ntfyAuth.enable {
         enable = true;
         defaultAccess = "deny-all";
-        environmentFile = config.sops.secrets.ALERTMANAGER_ENV.path;
+        environmentFile = cfg.notifications.ntfyAuth.environmentFile;
         users = [
           {
             name = "alertmanager";
