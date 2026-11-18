@@ -14,7 +14,7 @@ Pre-1.0: a minor version may break. Everything not listed under "Public" is inte
 Importing a module never starts anything; each has an `enable`.
 
 ## Consumer-supplied (no defaults that assume your environment)
-- A default install works but emits the warning `services.grafana-nixlab: secretKeyFile is not set…` until grafana-nixlab.secretKeyFile is set
+- A default install works but emits the warning `services.grafana-nixlab: secretKeyFile is not set…` until `grafana-nixlab.secretKeyFile` is set
 - If ntfy auth is on: `notifications.ntfyAuth.environmentFile` (defaults to alertmanager's `environmentFile`).
 - If you use the nsops modules: `secretsFile` per service, and sops-nix configured with a key source.
 - If you want remote access: `access.interfaces` (default: loopback only).
