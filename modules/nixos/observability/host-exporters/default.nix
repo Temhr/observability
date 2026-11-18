@@ -1,12 +1,12 @@
-{...}: {
+{self, ...}: {
   flake.nixosModules.systm--host-exporters-nixlab = {
     config,
     lib,
     pkgs,
-    nixlabLib,
     ...
   }: let
     cfg = config.services.host-exporters-nixlab;
+    obsLib = self.lib.obsLib;
     node = cfg.nodeExporter;
 
     collectorFlags = lib.concatStringsSep " " ([
@@ -91,7 +91,7 @@
           wantedBy = ["multi-user.target"];
           after = ["network.target"];
           serviceConfig =
-            nixlabLib.mkServiceHardening {
+            obsLib.mkServiceHardening {
               writablePaths = [];
               extraHardening = true;
             }

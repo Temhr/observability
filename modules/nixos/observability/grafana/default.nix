@@ -6,10 +6,10 @@
     config,
     lib,
     pkgs,
-    nixlabLib,
     ...
   }: let
     cfg = config.services.grafana-nixlab;
+    obsLib = self.lib.obsLib;
 
     # The module's own dashboards directory — all JSON files live here.
     # extraDashboards entries are resolved to paths inside this folder.
@@ -352,7 +352,7 @@
 
       # Guard: catch unknown dashboard names before anything tries to run.
       assertions = [
-        (nixlabLib.mkSslAssertion {
+        (obsLib.mkSslAssertion {
           inherit (cfg) enableSSL domain;
           moduleName = "services.grafana-nixlab";
         })
@@ -440,7 +440,7 @@
       # oneshot does that, and also correctly waits for a separate-mount
       # dataDir instead of racing it the way tmpfiles "d" rules can.
       # ----------------------------------------------------------------------------
-      systemd.services.grafana-permissions = nixlabLib.mkDataDirPermissionsService {
+      systemd.services.grafana-permissions = obsLib.mkDataDirPermissionsService {
         inherit pkgs;
         dataDir = cfg.dataDir;
         user = cfg.user;
@@ -490,7 +490,7 @@
           };
 
         serviceConfig =
-          nixlabLib.mkServiceHardening {
+          obsLib.mkServiceHardening {
             writablePaths = [cfg.dataDir];
             extraHardening = true;
           }
@@ -649,7 +649,7 @@
 
       # ── nginx reverse proxy ──────────────────────────────────────────────────
       services.nginx.enable = lib.mkIf (cfg.domain != null) true;
-      services.nginx.virtualHosts = nixlabLib.mkNginxVirtualHost {
+      services.nginx.virtualHosts = obsLib.mkNginxVirtualHost {
         inherit (cfg) domain listenAddress port enableSSL;
         extraConfig = ''
           proxy_buffer_size       128k;
@@ -661,7 +661,7 @@
       # ── Firewall ─────────────────────────────────────────────────────────────
       networking.firewall.allowedTCPPorts =
         lib.mkIf cfg.openFirewall
-        (nixlabLib.mkFirewallPorts {
+        (obsLib.mkFirewallPorts {
           inherit (cfg) domain listenAddress;
           servicePort = cfg.port;
         });

@@ -2,7 +2,7 @@
   config,
   lib,
   pkgs,
-  nixlabLib,
+  obsLib,
 }: let
   cfg = config.services.prometheus-nixlab;
   externalUrlFlag = lib.optionalString (cfg.externalUrl != null) " --web.external-url=${cfg.externalUrl}";
@@ -57,7 +57,7 @@ in {
   wants = ["time-sync.target"];
 
   serviceConfig =
-    nixlabLib.mkServiceHardening {
+    obsLib.mkServiceHardening {
       writablePaths = [cfg.dataDir];
       extraHardening = true;
     }

@@ -1,16 +1,14 @@
-# M2-REMOVE (S1): verbatim copy of nixlab/flake/nixos-lib.nix. Do NOT edit while nixlab keeps its own copy; Guide 2 replaces this with observability-owned helpers.
-# Shared helper functions available to all NixOS modules via specialArgs.
-# Receive in any module with: { nixlabLib, ... }:
-# Then destructure: inherit (nixlabLib) mkNginxVirtualHost mkFirewallPorts mkServiceHardening mkSslAssertion;
+# Observability-owned helper functions. Internal: no stability promise before 1.0.
+# Use from a module registered in this flake:  obsLib = self.lib.obsLib;
 {lib, ...}: {
-  flake.lib.nixlabLib = {
+  flake.lib.obsLib = {
     # ---------------------------------------------------------------------------
     # mkNginxVirtualHost
     # Returns an attrset for services.nginx.virtualHosts.
     # Returns empty attrset when domain is null (no proxy configured).
     #
     # Usage:
-    #   services.nginx.virtualHosts = nixlabLib.mkNginxVirtualHost {
+    #   services.nginx.virtualHosts = obsLib.mkNginxVirtualHost {
     #     inherit (cfg) domain listenAddress port enableSSL;
     #     # extraConfig is appended after the standard proxy headers.
     #     # Use it for service-specific settings like WebSocket support.
@@ -65,7 +63,7 @@
     #
     # Usage:
     #   networking.firewall.allowedTCPPorts = lib.mkIf cfg.openFirewall
-    #     (nixlabLib.mkFirewallPorts {
+    #     (obsLib.mkFirewallPorts {
     #       inherit (cfg) domain listenAddress;
     #       servicePort = cfg.port;
     #       extraPorts  = [ cfg.grpcPort ];   # optional
@@ -100,7 +98,7 @@
     #                    Callers override single keys that a service genuinely needs.
     #
     # Usage:
-    #   serviceConfig = nixlabLib.mkServiceHardening {
+    #   serviceConfig = obsLib.mkServiceHardening {
     #     writablePaths = [ cfg.dataDir ];
     #     allowJIT = true;
     #   } // {
@@ -168,7 +166,7 @@
     #
     # Usage:
     #   assertions = [
-    #     (nixlabLib.mkSslAssertion {
+    #     (obsLib.mkSslAssertion {
     #       inherit (cfg) enableSSL domain;
     #       moduleName = "services.my-service";
     #     })
@@ -202,7 +200,7 @@
     # currently owns the files.
     #
     # Usage:
-    #   systemd.services.comfyui-permissions = nixlabLib.mkDataDirPermissionsService {
+    #   systemd.services.comfyui-permissions = obsLib.mkDataDirPermissionsService {
     #     inherit pkgs;
     #     dataDir = cfg.dataDir;
     #     user    = cfg.user;
@@ -255,7 +253,7 @@
     # Usage (in a service module):
     #   config = lib.mkIf cfg.enable (lib.mkMerge [
     #     { ...existing config... }
-    #     (nixlabLib.mkWalSelfHeal {
+    #     (obsLib.mkWalSelfHeal {
     #       inherit pkgs;
     #       unit  = "loki";
     #       walDir = "${cfg.dataDir}/wal";

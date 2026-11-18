@@ -57,7 +57,7 @@
         no-nixlab-coupling = pkgs.runCommand "no-nixlab-coupling" {nativeBuildInputs = [pkgs.gnugrep];} ''
           cd ${self}
           if grep -rEn --exclude=observability-checks.nix \
-              'nixlabLib|hostMeta|allHosts|hostsMeta|serviceRegistry|config\.nixlab|M2-REMOVE|self\.nixosConfigurations' \
+              'obsLib|hostMeta|allHosts|hostsMeta|serviceRegistry|config\.nixlab|M2-REMOVE|self\.nixosConfigurations' \
               modules stacks sops flake; then
             echo "nixlab-internal coupling found (see matches above)" >&2
             exit 1

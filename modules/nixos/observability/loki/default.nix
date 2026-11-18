@@ -3,10 +3,10 @@
     config,
     lib,
     pkgs,
-    nixlabLib,
     ...
   }: let
     cfg = config.services.loki-nixlab;
+    obsLib = self.lib.obsLib;
   in {
     imports = [
       self.nixosModules.systm--ports-loki
@@ -184,7 +184,7 @@
         # ASSERTIONS - Catch invalid option combinations at eval time
         # ============================================================================
         assertions = [
-          (nixlabLib.mkSslAssertion {
+          (obsLib.mkSslAssertion {
             inherit (cfg) enableSSL domain;
             moduleName = "services.loki-nixlab";
           })
@@ -239,7 +239,7 @@
         # waits for the real mount and then recursively chowns, fixing both that
         # race and any UID/GID drift from a rebuild.
         # ----------------------------------------------------------------------------
-        systemd.services.loki-permissions = nixlabLib.mkDataDirPermissionsService {
+        systemd.services.loki-permissions = obsLib.mkDataDirPermissionsService {
           inherit pkgs;
           dataDir = cfg.dataDir;
           user = cfg.user;
@@ -257,7 +257,7 @@
           wants = ["time-sync.target"];
 
           serviceConfig =
-            nixlabLib.mkServiceHardening {
+            obsLib.mkServiceHardening {
               writablePaths = [cfg.dataDir];
               extraHardening = true;
             }
@@ -428,7 +428,7 @@
         # NGINX REVERSE PROXY - Only configured if domain is set
         # ----------------------------------------------------------------------------
         services.nginx.enable = lib.mkIf (cfg.domain != null) true;
-        services.nginx.virtualHosts = nixlabLib.mkNginxVirtualHost {
+        services.nginx.virtualHosts = obsLib.mkNginxVirtualHost {
           inherit (cfg) domain listenAddress port enableSSL;
         };
 
@@ -437,14 +437,14 @@
         # ----------------------------------------------------------------------------
         networking.firewall.allowedTCPPorts =
           lib.mkIf cfg.openFirewall
-          (nixlabLib.mkFirewallPorts {
+          (obsLib.mkFirewallPorts {
             inherit (cfg) domain listenAddress;
             servicePort = cfg.port;
             extraPorts = lib.optionals cfg.openGrpcFirewall [cfg.grpcPort];
           });
       }
       # Automatic recovery from a corrupt write-ahead log.
-      (nixlabLib.mkWalSelfHeal {
+      (obsLib.mkWalSelfHeal {
         inherit pkgs;
         unit = "loki";
         walDir = "${cfg.dataDir}/wal";
