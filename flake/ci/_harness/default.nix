@@ -3,7 +3,7 @@
   inputs,
   self,
 }: let
-  base = {pkgs, ...}: {
+  base = {...}: {
     networking.hostName = "testhost";
     system.stateVersion = "24.11";
     boot.loader.grub.enable = false;
