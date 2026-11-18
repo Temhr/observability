@@ -162,9 +162,7 @@
             };
           }
         ]
-        ++ lib.optionals (config.nixlab ? mainUser && config.nixlab.mainUser != "")
-        (map (u: {${u} = {extraGroups = ["alloy"];};})
-          ([config.nixlab.mainUser] ++ cfg.extraUsers))
+        ++ map (u: {${u} = {extraGroups = [cfg.group];};}) cfg.extraUsers
       );
 
       users.groups.alloy = {gid = cfg.gid;};

@@ -38,9 +38,7 @@ in {
         };
       }
     ]
-    ++ lib.optionals (config.nixlab ? mainUser && config.nixlab.mainUser != "")
-    (map (u: {${u} = {extraGroups = ["prometheus"];};})
-      ([config.nixlab.mainUser] ++ cfg.extraUsers))
+    ++ map (u: {${u} = {extraGroups = [cfg.group];};}) cfg.extraUsers
   );
 
   users.groups.prometheus = {gid = cfg.gid;};

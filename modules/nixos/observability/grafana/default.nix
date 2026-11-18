@@ -185,8 +185,7 @@
         description = "Pinned gid for the grafana group.";
       };
 
-      # OPTIONAL: allow opting out of the mainUser group membership
-      # without coupling to a specific external option name
+      # OPTIONAL: Extra users added to the service's group (for example, to read its data).
       extraUsers = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [];
@@ -423,9 +422,7 @@
             };
           }
         ]
-        ++ lib.optionals (config.nixlab ? mainUser && config.nixlab.mainUser != "")
-        (map (u: {${u} = {extraGroups = [cfg.group];};})
-          ([config.nixlab.mainUser] ++ cfg.extraUsers))
+        ++ map (u: {${u} = {extraGroups = [cfg.group];};}) cfg.extraUsers
       );
 
       users.groups.${cfg.group} = {gid = cfg.gid;};

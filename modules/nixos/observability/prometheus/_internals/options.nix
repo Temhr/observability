@@ -149,8 +149,7 @@
     description = "Alertmanager host:port targets. Empty disables alert delivery.";
   };
 
-  # OPTIONAL: allow opting out of the mainUser group membership
-  # without coupling to a specific external option name
+  # OPTIONAL: Extra users added to the service's group (for example, to read its data).
   extraUsers = lib.mkOption {
     type = lib.types.listOf lib.types.str;
     default = [];
