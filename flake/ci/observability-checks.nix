@@ -60,6 +60,11 @@
           touch $out
         '';
 
+        runbook-url-consistent = pkgs.runCommand "runbook-url-consistent" {} ''
+          test "${hosts.minimal.config.services.prometheus-nixlab.runbookBaseUrl}" = "${(prometheusMaintenanceAlerts {features = allFeatures;}).runbookBase or hosts.minimal.config.services.prometheus-nixlab.runbookBaseUrl}"
+          touch $out
+        '';
+
         # Whole-system build of three fake machines.
         toplevel-stable = hosts.stable.config.system.build.toplevel;
         toplevel-external = hosts.external.config.system.build.toplevel;

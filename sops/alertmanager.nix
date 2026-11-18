@@ -1,4 +1,4 @@
-{self, ...}: {
+{...}: {
   flake.nixosModules.nsops--alertmanager = {
     config,
     lib,
@@ -6,7 +6,7 @@
   }: let
     cfg = config.services.alertmanager-nixlab;
   in {
-    imports = [self.nixosModules.servc--alertmanager-nixlab];
+    imports = [];
     options.services.alertmanager-nixlab.secretsFile = lib.mkOption {
       type = lib.types.path;
       description = ''

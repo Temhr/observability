@@ -44,6 +44,12 @@
     description = "Directory for Prometheus time-series data";
   };
 
+  runbookBaseUrl = lib.mkOption {
+    type = lib.types.str;
+    default = "https://github.com/Temhr/observability/blob/main/docs/runbooks";
+    description = "Base URL that alert `runbook` annotations link to. The alert name and `.md` are appended.";
+  };
+
   retention = lib.mkOption {
     type = lib.types.str;
     default = "15d";

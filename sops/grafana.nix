@@ -1,4 +1,4 @@
-{self, ...}: {
+{...}: {
   flake.nixosModules.nsops--grafana = {
     config,
     lib,
@@ -6,7 +6,7 @@
   }: let
     cfg = config.services.grafana-nixlab;
   in {
-    imports = [self.nixosModules.servc--grafana-nixlab];
+    imports = [];
 
     options.services.grafana-nixlab.secretsFile = lib.mkOption {
       type = lib.types.path;
