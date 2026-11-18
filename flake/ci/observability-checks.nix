@@ -22,29 +22,49 @@
       blackboxProbes = true;
       alertmanagerWired = true;
     };
+
+    # Fake machines. Names become check names: prom-config-<name>, toplevel-<name>, ...
     harness = import ./_harness {inherit inputs self;};
     hosts = {
-      stable = harness.mkTestHost {modules = [harness.fullStack];};
+      # a nixlab-like consumer (uses sops-nix + nsops modules), stable nixpkgs
+      stable = harness.mkTestHost {modules = [harness.fullStack harness.withSops];};
+      # same, on unstable nixpkgs
       unstable = harness.mkTestHost {
         nixpkgs = inputs.nixpkgs-unstable;
-        modules = [harness.fullStack];
+        modules = [harness.fullStack harness.withSops];
       };
+      # a stranger: no sops-nix at all
+      external = harness.mkTestHost {modules = [harness.fullStack harness.withoutSops];};
+      # smallest possible: only `enable = true`
       minimal = harness.mkTestHost {modules = [harness.minimalStack];};
     };
   in {
     checks = lib.optionalAttrs (system == "x86_64-linux") (
+      # prom-config-<h>, prom-rules-<h>, alertmanager-config-<h> for each of these three
       (lib.foldl' (acc: name:
         acc
         // self.lib.observabilityHostChecks {
           inherit pkgs name;
           hostConfig = hosts.${name}.config;
-        }) {} ["stable" "unstable"])
+        }) {} ["stable" "unstable" "external"])
       // {
-        # Whole-system evaluation + build of each harness host.
+        # Whole-system build of three fake machines.
         toplevel-stable = hosts.stable.config.system.build.toplevel;
+        toplevel-external = hosts.external.config.system.build.toplevel;
         toplevel-minimal = hosts.minimal.config.system.build.toplevel;
-      }
-      // {
+
+        # Fails while ANY nixlab-internal dependency remains in this repository.
+        no-nixlab-coupling = pkgs.runCommand "no-nixlab-coupling" {nativeBuildInputs = [pkgs.gnugrep];} ''
+          cd ${self}
+          if grep -rEn --exclude=observability-checks.nix \
+              'nixlabLib|hostMeta|allHosts|hostsMeta|serviceRegistry|config\.nixlab|M2-REMOVE|self\.nixosConfigurations' \
+              modules stacks sops flake; then
+            echo "nixlab-internal coupling found (see matches above)" >&2
+            exit 1
+          fi
+          touch $out
+        '';
+
         # Every alert needs docs/runbooks/<Alert>.md, unless it is listed in docs/runbooks/_todo.txt.
         runbook-coverage = pkgs.runCommand "runbook-coverage" {nativeBuildInputs = [pkgs.jq];} ''
           jq -r '.groups[].rules[] | select(.alert) | .alert' ${toJson "rules-all-names.json" {
