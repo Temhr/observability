@@ -2,8 +2,6 @@
   flake.nixosModules.stack--observability = {
     config,
     lib,
-    hostMeta ? {},
-    allHosts ? {}, # M2-REMOVE (S2)
     ...
   }: let
     cfg = config.services.nixlab-observability;
@@ -187,12 +185,12 @@
 
       publicHost = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
-        default = hostMeta.address or null;
+        default = null;
+        example = "192.0.2.10";
         description = ''
           Host name or address that links in notifications and the UIs use.
-          Defaults to this host's static address from hostsMeta. Set a name here
-          (or a `domain` on a service) once nginx fronts it. Null leaves each
-          service's own fallback.
+          Set a name here (or a `domain` on a service) once a reverse proxy
+          fronts it. Null leaves each service's own fallback.
         '';
       };
 
@@ -203,8 +201,8 @@
           example = ["eno1"];
           description = ''
             Network interfaces on which the services in `expose` are reachable.
-            Empty means loopback only. Use the wired interface (hostMeta.interfaces
-            entries with type "ethernet"); never list a Wi-Fi interface.
+            Empty means loopback only. Names must be non-empty; omit interfaces
+            the machine does not have.
           '';
         };
         expose = lib.mkOption {
@@ -217,25 +215,21 @@
       probes = {
         gateway = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
-          default = hostMeta.gateway or null;
-          description = "Default gateway to ICMP-probe (from hostsMeta).";
+          default = null;
+          example = "192.0.2.1";
+          description = "Address (typically the default gateway) to ICMP-probe, or null.";
         };
-        hosts = lib.mkOption {
+        icmpTargets = lib.mkOption {
           type = lib.types.listOf lib.types.str;
           default = [];
-          description = "Other hosts (names in hostsMeta) to ICMP-probe in addition to the gateway. Empty by default: every host monitors only itself.";
-        };
-        tcpFromRegistry = lib.mkOption {
-          type = lib.types.bool;
-          default = true;
-          description = "TCP-probe the loopback ports of the services enabled on this host (from the service registry).";
+          example = ["192.0.2.20"];
+          description = "Addresses to ICMP-probe in addition to the gateway. This machine's own publicHost is excluded.";
         };
         tcpTargets = lib.mkOption {
-          # M2-REMOVE (S4): filled by the nixlab adapter from the homepage service registry.
           type = lib.types.listOf lib.types.str;
           default = [];
           example = ["127.0.0.1:8123"];
-          description = "host:port TCP probe targets used when tcpFromRegistry is true.";
+          description = "host:port TCP probe targets for the blackbox exporter.";
         };
       };
 
@@ -529,10 +523,9 @@
       services.prometheus-nixlab.maintenance.exporters.blackbox = {
         icmpTargets = lib.mkDefault (
           lib.optional (cfg.probes.gateway != null) cfg.probes.gateway
-          ++ lib.filter (a: a != (hostMeta.address or ""))
-          (map (h: allHosts.${h}.address) cfg.probes.hosts)
+          ++ lib.filter (a: a != cfg.publicHost) cfg.probes.icmpTargets
         );
-        tcpTargets = lib.mkIf cfg.probes.tcpFromRegistry (lib.mkDefault cfg.probes.tcpTargets);
+        tcpTargets = lib.mkDefault cfg.probes.tcpTargets;
       };
 
       services.loki-nixlab.ruler = {
