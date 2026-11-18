@@ -3,10 +3,10 @@
     config,
     lib,
     pkgs,
-    nixlabLib,
     ...
   }: let
     cfg = config.services.ntfy-nixlab;
+    obsLib = self.lib.obsLib;
 
     userSubmodule = lib.types.submodule {
       options = {
@@ -138,8 +138,7 @@
           description = "Pinned gid for the ntfy group.";
         };
 
-        # OPTIONAL: allow opting out of the mainUser group membership
-        # without coupling to a specific external option name
+        # OPTIONAL: Extra users added to the service's group (for example, to read its data).
         extraUsers = lib.mkOption {
           type = lib.types.listOf lib.types.str;
           default = [];
@@ -307,7 +306,7 @@
       # ASSERTIONS - Catch invalid option combinations at eval time
       # ============================================================================
       assertions = [
-        (nixlabLib.mkSslAssertion {
+        (obsLib.mkSslAssertion {
           inherit (cfg) enableSSL domain;
           moduleName = "services.ntfy-nixlab";
         })
@@ -358,9 +357,7 @@
             };
           }
         ]
-        ++ lib.optionals (config.nixlab ? mainUser && config.nixlab.mainUser != "")
-        (map (u: {${u} = {extraGroups = [cfg.group];};})
-          ([config.nixlab.mainUser] ++ cfg.extraUsers))
+        ++ map (u: {${u} = {extraGroups = [cfg.group];};}) cfg.extraUsers
       );
 
       users.groups.${cfg.group} = {gid = cfg.gid;};
@@ -368,7 +365,7 @@
       # ----------------------------------------------------------------------------
       # PERMISSIONS - fix ownership every boot, after dataDir is actually mounted
       # ----------------------------------------------------------------------------
-      systemd.services.ntfy-permissions = nixlabLib.mkDataDirPermissionsService {
+      systemd.services.ntfy-permissions = obsLib.mkDataDirPermissionsService {
         inherit pkgs;
         dataDir = cfg.dataDir;
         user = cfg.user;
@@ -385,7 +382,7 @@
         after = ["network.target" "ntfy-permissions.service"];
 
         serviceConfig =
-          nixlabLib.mkServiceHardening {
+          obsLib.mkServiceHardening {
             writablePaths = [cfg.dataDir];
             extraHardening = true;
           }
@@ -529,7 +526,7 @@
       # NGINX REVERSE PROXY - Only configured if domain is set
       # ----------------------------------------------------------------------------
       services.nginx.enable = lib.mkIf (cfg.domain != null) true;
-      services.nginx.virtualHosts = nixlabLib.mkNginxVirtualHost {
+      services.nginx.virtualHosts = obsLib.mkNginxVirtualHost {
         inherit (cfg) domain listenAddress port enableSSL;
         extraConfig = ''
           # Disable buffering so SSE messages are flushed immediately
@@ -547,7 +544,7 @@
       # ----------------------------------------------------------------------------
       networking.firewall.allowedTCPPorts =
         lib.mkIf cfg.openFirewall
-        (nixlabLib.mkFirewallPorts {
+        (obsLib.mkFirewallPorts {
             inherit (cfg) domain listenAddress;
             servicePort = cfg.port;
           }

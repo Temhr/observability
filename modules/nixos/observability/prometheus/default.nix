@@ -3,13 +3,13 @@
     config,
     lib,
     pkgs,
-    nixlabLib,
     ...
   }: let
     cfg = config.services.prometheus-nixlab;
+    obsLib = self.lib.obsLib;
 
     options = import ./_internals/options.nix {inherit lib pkgs;};
-    prometheusConfig = import ./_internals/config.nix {inherit config lib pkgs nixlabLib;};
+    prometheusConfig = import ./_internals/config.nix {inherit config lib pkgs obsLib;};
   in {
     imports = [
       self.nixosModules.systm--ports-prometheus
@@ -21,7 +21,7 @@
     config = lib.mkIf cfg.enable (lib.mkMerge [
       prometheusConfig
       # Automatic recovery when Prometheus crashes on a corrupt WAL.
-      (nixlabLib.mkWalSelfHeal {
+      (obsLib.mkWalSelfHeal {
         inherit pkgs;
         unit = "prometheus";
         walDir = "${cfg.dataDir}/data/wal";

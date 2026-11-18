@@ -1,12 +1,12 @@
-{...}: {
+{self, ...}: {
   flake.nixosModules.servc--alloy-nixlab = {
     config,
     lib,
     pkgs,
-    nixlabLib,
     ...
   }: let
     cfg = config.services.alloy-nixlab;
+    obsLib = self.lib.obsLib;
 
     baseAlloyConfig = ''
       // Loki client for sending logs
@@ -162,14 +162,12 @@
             };
           }
         ]
-        ++ lib.optionals (config.nixlab ? mainUser && config.nixlab.mainUser != "")
-        (map (u: {${u} = {extraGroups = ["alloy"];};})
-          ([config.nixlab.mainUser] ++ cfg.extraUsers))
+        ++ map (u: {${u} = {extraGroups = [cfg.group];};}) cfg.extraUsers
       );
 
       users.groups.alloy = {gid = cfg.gid;};
 
-      systemd.services.alloy-permissions = nixlabLib.mkDataDirPermissionsService {
+      systemd.services.alloy-permissions = obsLib.mkDataDirPermissionsService {
         inherit pkgs;
         dataDir = "/var/lib/alloy";
         user = "alloy";
@@ -184,7 +182,7 @@
         wants = ["time-sync.target"];
 
         serviceConfig =
-          nixlabLib.mkServiceHardening {
+          obsLib.mkServiceHardening {
             writablePaths = ["/var/lib/alloy"];
             allowJIT = true;
             extraHardening = true;

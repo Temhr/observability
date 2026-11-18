@@ -3,10 +3,10 @@
     config,
     lib,
     pkgs,
-    nixlabLib,
     ...
   }: let
     cfg = config.services.loki-nixlab;
+    obsLib = self.lib.obsLib;
   in {
     imports = [
       self.nixosModules.systm--ports-loki
@@ -72,26 +72,11 @@
           description = "The Loki package to use";
         };
 
-        # OPTIONAL: Alloy package to use (default: pkgs.grafana-alloy)
-        alloyPackage = lib.mkOption {
-          type = lib.types.package;
-          default = pkgs.grafana-alloy;
-          defaultText = lib.literalExpression "pkgs.grafana-alloy";
-          description = "The Grafana Alloy package to use";
-        };
-
         # OPTIONAL: Auto-open firewall ports (default: true)
         openFirewall = lib.mkOption {
           type = lib.types.bool;
           default = true;
           description = "Open firewall ports";
-        };
-
-        # OPTIONAL: Enable Alloy for local log collection (default: true)
-        enableAlloy = lib.mkOption {
-          type = lib.types.bool;
-          default = true;
-          description = "Enable Grafana Alloy to collect system logs";
         };
 
         user = lib.mkOption {
@@ -118,8 +103,7 @@
           description = "Pinned gid for the loki group.";
         };
 
-        # OPTIONAL: allow opting out of the mainUser group membership
-        # without coupling to a specific external option name
+        # OPTIONAL: Extra users added to the service's group (for example, to read its data).
         extraUsers = lib.mkOption {
           type = lib.types.listOf lib.types.str;
           default = [];
@@ -144,17 +128,6 @@
           };
         };
 
-        # Maintenance observability options
-        maintenance = {
-          enable = lib.mkEnableOption "maintenance task logging integration";
-
-          logPath = lib.mkOption {
-            type = lib.types.str;
-            default = "/var/log/maintenance.jsonl";
-            description = "Path to the maintenance log (JSON lines). Must NOT end in .log or it will also be picked up by the /var/log/*.log pipeline.";
-          };
-        };
-
         grpcPort = lib.mkOption {
           type = lib.types.port;
           default = 9096;
@@ -165,12 +138,6 @@
           type = lib.types.bool;
           default = false;
           description = "Open the gRPC port in the firewall. Only needed for multi-instance Loki deployments.";
-        };
-
-        alloyPort = lib.mkOption {
-          type = lib.types.port;
-          default = 12345;
-          description = "Port for Alloy's HTTP server (UI, /metrics). Bound to loopback.";
         };
       };
     };
@@ -184,14 +151,10 @@
         # ASSERTIONS - Catch invalid option combinations at eval time
         # ============================================================================
         assertions = [
-          (nixlabLib.mkSslAssertion {
+          (obsLib.mkSslAssertion {
             inherit (cfg) enableSSL domain;
             moduleName = "services.loki-nixlab";
           })
-          {
-            assertion = !(cfg.maintenance.enable && lib.hasSuffix ".log" cfg.maintenance.logPath);
-            message = "services.loki-nixlab.maintenance.logPath must not end in .log (it would also be tailed by the /var/log/*.log pipeline and ingested twice).";
-          }
           {
             assertion = !cfg.ruler.enable || cfg.ruler.alertmanagerUrl != null;
             message = "services.loki-nixlab.ruler.enable needs services.loki-nixlab.ruler.alertmanagerUrl.";
@@ -223,9 +186,7 @@
               };
             }
           ]
-          ++ lib.optionals (config.nixlab ? mainUser && config.nixlab.mainUser != "")
-          (map (u: {${u} = {extraGroups = [cfg.group];};})
-            ([config.nixlab.mainUser] ++ cfg.extraUsers))
+          ++ map (u: {${u} = {extraGroups = [cfg.group];};}) cfg.extraUsers
         );
 
         users.groups.${cfg.group} = {};
@@ -239,7 +200,7 @@
         # waits for the real mount and then recursively chowns, fixing both that
         # race and any UID/GID drift from a rebuild.
         # ----------------------------------------------------------------------------
-        systemd.services.loki-permissions = nixlabLib.mkDataDirPermissionsService {
+        systemd.services.loki-permissions = obsLib.mkDataDirPermissionsService {
           inherit pkgs;
           dataDir = cfg.dataDir;
           user = cfg.user;
@@ -257,7 +218,7 @@
           wants = ["time-sync.target"];
 
           serviceConfig =
-            nixlabLib.mkServiceHardening {
+            obsLib.mkServiceHardening {
               writablePaths = [cfg.dataDir];
               extraHardening = true;
             }
@@ -428,7 +389,7 @@
         # NGINX REVERSE PROXY - Only configured if domain is set
         # ----------------------------------------------------------------------------
         services.nginx.enable = lib.mkIf (cfg.domain != null) true;
-        services.nginx.virtualHosts = nixlabLib.mkNginxVirtualHost {
+        services.nginx.virtualHosts = obsLib.mkNginxVirtualHost {
           inherit (cfg) domain listenAddress port enableSSL;
         };
 
@@ -437,14 +398,14 @@
         # ----------------------------------------------------------------------------
         networking.firewall.allowedTCPPorts =
           lib.mkIf cfg.openFirewall
-          (nixlabLib.mkFirewallPorts {
+          (obsLib.mkFirewallPorts {
             inherit (cfg) domain listenAddress;
             servicePort = cfg.port;
             extraPorts = lib.optionals cfg.openGrpcFirewall [cfg.grpcPort];
           });
       }
       # Automatic recovery from a corrupt write-ahead log.
-      (nixlabLib.mkWalSelfHeal {
+      (obsLib.mkWalSelfHeal {
         inherit pkgs;
         unit = "loki";
         walDir = "${cfg.dataDir}/wal";

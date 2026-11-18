@@ -1,12 +1,12 @@
 {
   config,
   lib,
-  nixlabLib,
+  obsLib,
 }: let
   cfg = config.services.prometheus-nixlab;
 in {
   enable = lib.mkIf (cfg.domain != null) true;
-  virtualHosts = nixlabLib.mkNginxVirtualHost {
+  virtualHosts = obsLib.mkNginxVirtualHost {
     inherit (cfg) domain listenAddress port enableSSL;
   };
 }

@@ -1,4 +1,4 @@
-{self, ...}: {
+{...}: {
   flake.nixosModules.nsops--alertmanager = {
     config,
     lib,
@@ -6,7 +6,7 @@
   }: let
     cfg = config.services.alertmanager-nixlab;
   in {
-    imports = [self.nixosModules.servc--alertmanager-nixlab];
+    imports = [];
     options.services.alertmanager-nixlab.secretsFile = lib.mkOption {
       type = lib.types.path;
       description = ''
@@ -38,7 +38,9 @@
         # process drops privileges — the same approach used by other DynamicUser
         # services in nixpkgs.
         format = "dotenv";
-        restartUnits = ["alertmanager.service"];
+        restartUnits =
+          ["alertmanager.service"]
+          ++ lib.optional (config.services.ntfy-nixlab.auth.enable or false) "ntfy-provision.service";
       };
 
       # Wire the decrypted file path into the service module option so the

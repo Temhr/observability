@@ -2,15 +2,15 @@
   config,
   lib,
   pkgs,
-  nixlabLib,
+  obsLib,
   ...
 }: let
   cfg = config.services.prometheus-nixlab;
 
   # Import specialized configurations
-  prometheusService = import ./services/prometheus.nix {inherit config lib pkgs nixlabLib;};
+  prometheusService = import ./services/prometheus.nix {inherit config lib pkgs obsLib;};
   maintenanceExporters = import ./exporters/maintenance.nix {inherit config lib pkgs;};
-  nginxConfig = import ./extras/nginx.nix {inherit config lib nixlabLib;};
+  nginxConfig = import ./extras/nginx.nix {inherit config lib obsLib;};
 in {
   # Directory setup
   systemd.tmpfiles.rules =
@@ -38,9 +38,7 @@ in {
         };
       }
     ]
-    ++ lib.optionals (config.nixlab ? mainUser && config.nixlab.mainUser != "")
-    (map (u: {${u} = {extraGroups = ["prometheus"];};})
-      ([config.nixlab.mainUser] ++ cfg.extraUsers))
+    ++ map (u: {${u} = {extraGroups = [cfg.group];};}) cfg.extraUsers
   );
 
   users.groups.prometheus = {gid = cfg.gid;};
@@ -52,7 +50,7 @@ in {
   # ----------------------------------------------------------------------------
   systemd.services =
     {
-      prometheus-permissions = nixlabLib.mkDataDirPermissionsService {
+      prometheus-permissions = obsLib.mkDataDirPermissionsService {
         inherit pkgs;
         dataDir = cfg.dataDir;
         user = "prometheus";
@@ -119,7 +117,7 @@ in {
   # Firewall configuration
   networking.firewall.allowedTCPPorts =
     lib.mkIf cfg.openFirewall
-    (nixlabLib.mkFirewallPorts {
+    (obsLib.mkFirewallPorts {
       inherit (cfg) domain listenAddress;
       servicePort = cfg.port;
     });

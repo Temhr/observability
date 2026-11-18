@@ -44,6 +44,12 @@
     description = "Directory for Prometheus time-series data";
   };
 
+  runbookBaseUrl = lib.mkOption {
+    type = lib.types.str;
+    default = "https://github.com/Temhr/observability/blob/main/docs/runbooks";
+    description = "Base URL that alert `runbook` annotations link to. The alert name and `.md` are appended.";
+  };
+
   retention = lib.mkOption {
     type = lib.types.str;
     default = "15d";
@@ -149,8 +155,7 @@
     description = "Alertmanager host:port targets. Empty disables alert delivery.";
   };
 
-  # OPTIONAL: allow opting out of the mainUser group membership
-  # without coupling to a specific external option name
+  # OPTIONAL: Extra users added to the service's group (for example, to read its data).
   extraUsers = lib.mkOption {
     type = lib.types.listOf lib.types.str;
     default = [];

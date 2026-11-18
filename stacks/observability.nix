@@ -2,8 +2,6 @@
   flake.nixosModules.stack--observability = {
     config,
     lib,
-    hostMeta ? {},
-    allHosts ? {}, # M2-REMOVE (S2)
     ...
   }: let
     cfg = config.services.nixlab-observability;
@@ -38,7 +36,7 @@
       local.file_match "maintenance" {
         path_targets = [{
           __address__ = "localhost",
-          __path__    = "${svc.loki-nixlab.maintenance.logPath}",
+          __path__    = "${svc.maintenance-log-nixlab.logPath}",
         }]
       }
 
@@ -162,14 +160,20 @@
     allTopics = [cfg.notifications.ntfyTopic] ++ map topicName (lib.attrNames cfg.notifications.topics);
   in {
     imports = [
-      self.nixosModules.nsops--alertmanager
-      self.nixosModules.nsops--grafana
+      self.nixosModules.servc--alertmanager-nixlab
+      self.nixosModules.servc--grafana-nixlab
       self.nixosModules.servc--alloy-nixlab
       self.nixosModules.servc--loki-nixlab
       self.nixosModules.servc--prometheus-nixlab
       self.nixosModules.servc--ntfy-nixlab
       self.nixosModules.systm--maintenance-log-nixlab
       self.nixosModules.systm--observability-backup-nixlab
+      # Remove in 0.3
+      (lib.mkRenamedOptionModule ["services" "loki-nixlab" "alloyPort"] ["services" "alloy-nixlab" "port"])
+      (lib.mkRenamedOptionModule ["services" "loki-nixlab" "alloyPackage"] ["services" "alloy-nixlab" "package"])
+      (lib.mkRenamedOptionModule ["services" "loki-nixlab" "enableAlloy"] ["services" "alloy-nixlab" "enable"])
+      (lib.mkRenamedOptionModule ["services" "loki-nixlab" "maintenance" "enable"] ["services" "maintenance-log-nixlab" "enable"])
+      (lib.mkRenamedOptionModule ["services" "loki-nixlab" "maintenance" "logPath"] ["services" "maintenance-log-nixlab" "logPath"])
     ];
 
     options.services.nixlab-observability = {
@@ -187,12 +191,12 @@
 
       publicHost = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
-        default = hostMeta.address or null;
+        default = null;
+        example = "192.0.2.10";
         description = ''
           Host name or address that links in notifications and the UIs use.
-          Defaults to this host's static address from hostsMeta. Set a name here
-          (or a `domain` on a service) once nginx fronts it. Null leaves each
-          service's own fallback.
+          Set a name here (or a `domain` on a service) once a reverse proxy
+          fronts it. Null leaves each service's own fallback.
         '';
       };
 
@@ -203,8 +207,8 @@
           example = ["eno1"];
           description = ''
             Network interfaces on which the services in `expose` are reachable.
-            Empty means loopback only. Use the wired interface (hostMeta.interfaces
-            entries with type "ethernet"); never list a Wi-Fi interface.
+            Empty means loopback only. Names must be non-empty; omit interfaces
+            the machine does not have.
           '';
         };
         expose = lib.mkOption {
@@ -217,25 +221,21 @@
       probes = {
         gateway = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
-          default = hostMeta.gateway or null;
-          description = "Default gateway to ICMP-probe (from hostsMeta).";
+          default = null;
+          example = "192.0.2.1";
+          description = "Address (typically the default gateway) to ICMP-probe, or null.";
         };
-        hosts = lib.mkOption {
+        icmpTargets = lib.mkOption {
           type = lib.types.listOf lib.types.str;
           default = [];
-          description = "Other hosts (names in hostsMeta) to ICMP-probe in addition to the gateway. Empty by default: every host monitors only itself.";
-        };
-        tcpFromRegistry = lib.mkOption {
-          type = lib.types.bool;
-          default = true;
-          description = "TCP-probe the loopback ports of the services enabled on this host (from the service registry).";
+          example = ["192.0.2.20"];
+          description = "Addresses to ICMP-probe in addition to the gateway. This machine's own publicHost is excluded.";
         };
         tcpTargets = lib.mkOption {
-          # M2-REMOVE (S4): filled by the nixlab adapter from the homepage service registry.
           type = lib.types.listOf lib.types.str;
           default = [];
           example = ["127.0.0.1:8123"];
-          description = "host:port TCP probe targets used when tcpFromRegistry is true.";
+          description = "host:port TCP probe targets for the blackbox exporter.";
         };
       };
 
@@ -325,6 +325,15 @@
           description = "Use ntfy message templating so notifications show alert summary/description instead of raw JSON. Requires ntfy >= 2.10.";
         };
         ntfyAuth.enable = lib.mkEnableOption "ntfy authentication with an Alertmanager writer and a reader account (needs NTFY_*_PASSWORD in the alertmanager secrets file)";
+        ntfyAuth.environmentFile = lib.mkOption {
+          type = lib.types.nullOr lib.types.path;
+          default = config.services.alertmanager-nixlab.environmentFile;
+          defaultText = lib.literalExpression "config.services.alertmanager-nixlab.environmentFile";
+          description = ''
+            File of KEY=VALUE lines read by ntfy-provision (NTFY_ALERTMANAGER_PASSWORD and friends).
+            Defaults to the Alertmanager environment file; both need the same credentials.
+          '';
+        };
         separateCritical = lib.mkOption {
           type = lib.types.bool;
           default = true;
@@ -387,6 +396,14 @@
           assertion = lib.all (n: builtins.match "[A-Za-z0-9_-]+" n != null) (lib.attrNames cfg.notifications.topics);
           message = "services.nixlab-observability.notifications.topics: names may only contain letters, digits, '-' and '_'.";
         }
+        {
+          assertion = cfg.notifications.ntfyAuth.enable -> (cfg.notifications.ntfyAuth.environmentFile != null);
+          message = "services.nixlab-observability.notifications.ntfyAuth.enable needs notifications.ntfyAuth.environmentFile (it defaults to services.alertmanager-nixlab.environmentFile). Provide a file containing the NTFY_*_PASSWORD variables.";
+        }
+        {
+          assertion = lib.all (i: i != "") cfg.access.interfaces;
+          message = "services.nixlab-observability.access.interfaces must not contain empty interface names. Remove interfaces this machine does not have (for example a missing Wi-Fi device) before passing the list.";
+        }
       ];
 
       # Override contract (hosts/<name>.nix):
@@ -413,7 +430,6 @@
         dataDir = lib.mkDefault "${cfg.dataDir}/loki";
         openFirewall = lib.mkDefault cfg.openFirewall;
         retention = lib.mkDefault cfg.loki.retention;
-        maintenance.enable = lib.mkDefault cfg.loki.maintenance.enable;
       };
 
       services.prometheus-nixlab = {
@@ -494,14 +510,10 @@
         allowedTCPPorts = map (name: port.${name}) cfg.access.expose;
       });
 
-      # ntfy-provision writes these passwords into ntfy's user database, so a rotated
-      # secret has to re-run it.
-      sops.secrets.ALERTMANAGER_ENV.restartUnits = lib.mkIf cfg.notifications.ntfyAuth.enable ["ntfy-provision.service"];
-
       services.ntfy-nixlab.auth = lib.mkIf cfg.notifications.ntfyAuth.enable {
         enable = true;
         defaultAccess = "deny-all";
-        environmentFile = config.sops.secrets.ALERTMANAGER_ENV.path;
+        environmentFile = cfg.notifications.ntfyAuth.environmentFile;
         users = [
           {
             name = "alertmanager";
@@ -529,10 +541,9 @@
       services.prometheus-nixlab.maintenance.exporters.blackbox = {
         icmpTargets = lib.mkDefault (
           lib.optional (cfg.probes.gateway != null) cfg.probes.gateway
-          ++ lib.filter (a: a != (hostMeta.address or ""))
-          (map (h: allHosts.${h}.address) cfg.probes.hosts)
+          ++ lib.filter (a: a != cfg.publicHost) cfg.probes.icmpTargets
         );
-        tcpTargets = lib.mkIf cfg.probes.tcpFromRegistry (lib.mkDefault cfg.probes.tcpTargets);
+        tcpTargets = lib.mkDefault cfg.probes.tcpTargets;
       };
 
       services.loki-nixlab.ruler = {
@@ -594,19 +605,16 @@
 
       # The helper follows Loki's maintenance settings so the file Alloy tails and the file the helper writes are the same.
       services.maintenance-log-nixlab = {
-        enable = lib.mkDefault svc.loki-nixlab.maintenance.enable;
-        logPath = lib.mkDefault svc.loki-nixlab.maintenance.logPath;
+        enable = lib.mkDefault cfg.loki.maintenance.enable;
         textfileDir = lib.mkIf cfg.prometheus.maintenance.enable "/var/lib/node_exporter";
       };
 
       services.alloy-nixlab = {
-        enable = lib.mkDefault svc.loki-nixlab.enableAlloy;
-        port = lib.mkDefault svc.loki-nixlab.alloyPort;
-        package = lib.mkDefault svc.loki-nixlab.alloyPackage;
+        enable = lib.mkDefault true;
         lokiUrl = lib.mkDefault "http://127.0.0.1:${toString port.loki}/loki/api/v1/push";
         uid = lib.mkDefault 741;
         gid = lib.mkDefault 741;
-        extraConfig = lib.optionalString svc.loki-nixlab.maintenance.enable maintenanceAlloyConfig;
+        extraConfig = lib.optionalString svc.maintenance-log-nixlab.enable maintenanceAlloyConfig;
       };
 
       services.observability-backup-nixlab = {
@@ -618,7 +626,7 @@
           ++ lib.optional svc.ntfy-nixlab.auth.enable "${svc.ntfy-nixlab.dataDir}/user.db";
         plainFiles = [
           "/var/lib/private/alertmanager"
-          svc.loki-nixlab.maintenance.logPath
+          svc.maintenance-log-nixlab.logPath
         ];
       };
 
@@ -657,8 +665,8 @@
           (scrapeJob "grafana" (loopback port.grafana))
           (scrapeJob "alertmanager" (loopback port.alertmanager))
         ]
-        ++ lib.optional svc.loki-nixlab.enableAlloy
-        (scrapeJob "alloy" (loopback svc.loki-nixlab.alloyPort))
+        ++ lib.optional svc.alloy-nixlab.enable
+        (scrapeJob "alloy" (loopback svc.alloy-nixlab.port))
         ++ lib.optional cfg.integrations.traefik.enable (scrapeJob "traefik" cfg.integrations.traefik.target)
         ++ lib.optional cfg.integrations.cadvisor.enable (scrapeJob "cadvisor" cfg.integrations.cadvisor.target)
         ++ lib.optional cfg.integrations.postgres.enable (scrapeJob "postgres" cfg.integrations.postgres.target);

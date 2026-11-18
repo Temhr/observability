@@ -3,10 +3,10 @@
     config,
     lib,
     pkgs,
-    nixlabLib,
     ...
   }: let
     cfg = config.services.alertmanager-nixlab;
+    obsLib = self.lib.obsLib;
 
     # ── Submodule types ────────────────────────────────────────────────────────
 
@@ -478,7 +478,7 @@
       # ASSERTIONS - Catch invalid option combinations at eval time
       # ============================================================================
       assertions = [
-        (nixlabLib.mkSslAssertion {
+        (obsLib.mkSslAssertion {
           inherit (cfg) enableSSL domain;
           moduleName = "services.alertmanager-nixlab";
         })
@@ -565,7 +565,7 @@
       # NGINX REVERSE PROXY - Only configured if domain is set
       # ----------------------------------------------------------------------------
       services.nginx.enable = lib.mkIf (cfg.domain != null) true;
-      services.nginx.virtualHosts = nixlabLib.mkNginxVirtualHost {
+      services.nginx.virtualHosts = obsLib.mkNginxVirtualHost {
         inherit (cfg) domain listenAddress port enableSSL;
       };
 
@@ -574,7 +574,7 @@
       # ----------------------------------------------------------------------------
       networking.firewall.allowedTCPPorts =
         lib.mkIf cfg.openFirewall
-        (nixlabLib.mkFirewallPorts {
+        (obsLib.mkFirewallPorts {
             inherit (cfg) domain listenAddress;
             servicePort = cfg.port;
           }
