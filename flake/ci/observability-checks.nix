@@ -37,6 +37,13 @@
       external = harness.mkTestHost {modules = [harness.fullStack harness.withoutSops];};
       # smallest possible: only `enable = true`
       minimal = harness.mkTestHost {modules = [harness.minimalStack];};
+      # An old-style setting must still reach its new home.
+      alias = harness.mkTestHost {
+        modules = [
+          harness.minimalStack
+          {services.loki-nixlab.alloyPort = 12999;}
+        ];
+      };
     };
   in {
     checks = lib.optionalAttrs (system == "x86_64-linux") (
@@ -48,6 +55,11 @@
           hostConfig = hosts.${name}.config;
         }) {} ["stable" "unstable" "external"])
       // {
+        alias-alloyport = pkgs.runCommand "alias-alloyport" {} ''
+          test "${toString hosts.alias.config.services.alloy-nixlab.port}" = "12999"
+          touch $out
+        '';
+
         # Whole-system build of three fake machines.
         toplevel-stable = hosts.stable.config.system.build.toplevel;
         toplevel-external = hosts.external.config.system.build.toplevel;

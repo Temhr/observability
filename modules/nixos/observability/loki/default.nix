@@ -72,26 +72,11 @@
           description = "The Loki package to use";
         };
 
-        # OPTIONAL: Alloy package to use (default: pkgs.grafana-alloy)
-        alloyPackage = lib.mkOption {
-          type = lib.types.package;
-          default = pkgs.grafana-alloy;
-          defaultText = lib.literalExpression "pkgs.grafana-alloy";
-          description = "The Grafana Alloy package to use";
-        };
-
         # OPTIONAL: Auto-open firewall ports (default: true)
         openFirewall = lib.mkOption {
           type = lib.types.bool;
           default = true;
           description = "Open firewall ports";
-        };
-
-        # OPTIONAL: Enable Alloy for local log collection (default: true)
-        enableAlloy = lib.mkOption {
-          type = lib.types.bool;
-          default = true;
-          description = "Enable Grafana Alloy to collect system logs";
         };
 
         user = lib.mkOption {
@@ -143,17 +128,6 @@
           };
         };
 
-        # Maintenance observability options
-        maintenance = {
-          enable = lib.mkEnableOption "maintenance task logging integration";
-
-          logPath = lib.mkOption {
-            type = lib.types.str;
-            default = "/var/log/maintenance.jsonl";
-            description = "Path to the maintenance log (JSON lines). Must NOT end in .log or it will also be picked up by the /var/log/*.log pipeline.";
-          };
-        };
-
         grpcPort = lib.mkOption {
           type = lib.types.port;
           default = 9096;
@@ -164,12 +138,6 @@
           type = lib.types.bool;
           default = false;
           description = "Open the gRPC port in the firewall. Only needed for multi-instance Loki deployments.";
-        };
-
-        alloyPort = lib.mkOption {
-          type = lib.types.port;
-          default = 12345;
-          description = "Port for Alloy's HTTP server (UI, /metrics). Bound to loopback.";
         };
       };
     };
@@ -187,10 +155,6 @@
             inherit (cfg) enableSSL domain;
             moduleName = "services.loki-nixlab";
           })
-          {
-            assertion = !(cfg.maintenance.enable && lib.hasSuffix ".log" cfg.maintenance.logPath);
-            message = "services.loki-nixlab.maintenance.logPath must not end in .log (it would also be tailed by the /var/log/*.log pipeline and ingested twice).";
-          }
           {
             assertion = !cfg.ruler.enable || cfg.ruler.alertmanagerUrl != null;
             message = "services.loki-nixlab.ruler.enable needs services.loki-nixlab.ruler.alertmanagerUrl.";

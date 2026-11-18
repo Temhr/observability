@@ -36,7 +36,7 @@
       local.file_match "maintenance" {
         path_targets = [{
           __address__ = "localhost",
-          __path__    = "${svc.loki-nixlab.maintenance.logPath}",
+          __path__    = "${svc.maintenance-log-nixlab.logPath}",
         }]
       }
 
@@ -168,6 +168,12 @@
       self.nixosModules.servc--ntfy-nixlab
       self.nixosModules.systm--maintenance-log-nixlab
       self.nixosModules.systm--observability-backup-nixlab
+      # Remove in 0.3
+      (lib.mkRenamedOptionModule ["services" "loki-nixlab" "alloyPort"] ["services" "alloy-nixlab" "port"])
+      (lib.mkRenamedOptionModule ["services" "loki-nixlab" "alloyPackage"] ["services" "alloy-nixlab" "package"])
+      (lib.mkRenamedOptionModule ["services" "loki-nixlab" "enableAlloy"] ["services" "alloy-nixlab" "enable"])
+      (lib.mkRenamedOptionModule ["services" "loki-nixlab" "maintenance" "enable"] ["services" "maintenance-log-nixlab" "enable"])
+      (lib.mkRenamedOptionModule ["services" "loki-nixlab" "maintenance" "logPath"] ["services" "maintenance-log-nixlab" "logPath"])
     ];
 
     options.services.nixlab-observability = {
@@ -407,7 +413,6 @@
         dataDir = lib.mkDefault "${cfg.dataDir}/loki";
         openFirewall = lib.mkDefault cfg.openFirewall;
         retention = lib.mkDefault cfg.loki.retention;
-        maintenance.enable = lib.mkDefault cfg.loki.maintenance.enable;
       };
 
       services.prometheus-nixlab = {
@@ -587,19 +592,16 @@
 
       # The helper follows Loki's maintenance settings so the file Alloy tails and the file the helper writes are the same.
       services.maintenance-log-nixlab = {
-        enable = lib.mkDefault svc.loki-nixlab.maintenance.enable;
-        logPath = lib.mkDefault svc.loki-nixlab.maintenance.logPath;
+        enable = lib.mkDefault cfg.loki.maintenance.enable;
         textfileDir = lib.mkIf cfg.prometheus.maintenance.enable "/var/lib/node_exporter";
       };
 
       services.alloy-nixlab = {
-        enable = lib.mkDefault svc.loki-nixlab.enableAlloy;
-        port = lib.mkDefault svc.loki-nixlab.alloyPort;
-        package = lib.mkDefault svc.loki-nixlab.alloyPackage;
+        enable = lib.mkDefault true;
         lokiUrl = lib.mkDefault "http://127.0.0.1:${toString port.loki}/loki/api/v1/push";
         uid = lib.mkDefault 741;
         gid = lib.mkDefault 741;
-        extraConfig = lib.optionalString svc.loki-nixlab.maintenance.enable maintenanceAlloyConfig;
+        extraConfig = lib.optionalString svc.maintenance-log-nixlab.enable maintenanceAlloyConfig;
       };
 
       services.observability-backup-nixlab = {
@@ -611,7 +613,7 @@
           ++ lib.optional svc.ntfy-nixlab.auth.enable "${svc.ntfy-nixlab.dataDir}/user.db";
         plainFiles = [
           "/var/lib/private/alertmanager"
-          svc.loki-nixlab.maintenance.logPath
+          svc.maintenance-log-nixlab.logPath
         ];
       };
 
@@ -650,8 +652,8 @@
           (scrapeJob "grafana" (loopback port.grafana))
           (scrapeJob "alertmanager" (loopback port.alertmanager))
         ]
-        ++ lib.optional svc.loki-nixlab.enableAlloy
-        (scrapeJob "alloy" (loopback svc.loki-nixlab.alloyPort))
+        ++ lib.optional svc.alloy-nixlab.enable
+        (scrapeJob "alloy" (loopback svc.alloy-nixlab.port))
         ++ lib.optional cfg.integrations.traefik.enable (scrapeJob "traefik" cfg.integrations.traefik.target)
         ++ lib.optional cfg.integrations.cadvisor.enable (scrapeJob "cadvisor" cfg.integrations.cadvisor.target)
         ++ lib.optional cfg.integrations.postgres.enable (scrapeJob "postgres" cfg.integrations.postgres.target);
