@@ -38,7 +38,7 @@ in {
         };
       }
     ]
-    ++ map (u: {${u} = {extraGroups = [cfg.group];};}) cfg.extraUsers
+    ++ map (u: {${u} = {extraGroups = ["prometheus"];};}) cfg.extraUsers
   );
 
   users.groups.prometheus = {gid = cfg.gid;};

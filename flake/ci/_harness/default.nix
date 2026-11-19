@@ -44,6 +44,13 @@ in {
   };
 
   fullStack = {
+    users.users.testuser.isNormalUser = true;
+    services.loki-nixlab.extraUsers = ["testuser"];
+    services.grafana-nixlab.extraUsers = ["testuser"];
+    services.alloy-nixlab.extraUsers = ["testuser"];
+    services.ntfy-nixlab.extraUsers = ["testuser"];
+    services.prometheus-nixlab.extraUsers = ["testuser"];
+
     services.nixlab-observability = {
       enable = true;
       publicHost = "192.0.2.10";

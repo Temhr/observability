@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+### Fixed
+- extraUsers on alloy-nixlab and prometheus-nixlab failed evaluation (referenced an undeclared group option).
+
 ## 0.2.0
 ### Breaking
 See the table in docs/architecture/public-api.md.

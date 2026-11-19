@@ -162,7 +162,7 @@
             };
           }
         ]
-        ++ map (u: {${u} = {extraGroups = [cfg.group];};}) cfg.extraUsers
+        ++ map (u: {${u} = {extraGroups = ["alloy"];};}) cfg.extraUsers
       );
 
       users.groups.alloy = {gid = cfg.gid;};
