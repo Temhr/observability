@@ -1,158 +1,185 @@
-<h1>NixOS Observability</h1>
+# observability
 
-A modular, declarative and self-contained observability stack for NixOS, distributed as an independent Nix flake.
+Prometheus, Alertmanager, ntfy, Loki, Alloy and Grafana as **composable NixOS modules**, plus one aggregator module that wires them together: provisioned datasources, scrape jobs, alert routing to push notifications, about 60 alerts with a runbook each, a manual maintenance log, nightly state backups and self-healing for the failure modes that make monitoring lie.
 
-<h2>Overview</h2>
+Every service is usable on its own; the aggregator is what you enable if you want the whole stack with one option. It was extracted from [nixlab](https://github.com/Temhr/nixlab), where it still monitors the author's fleet, and it contains nothing specific to that fleet.
 
-This repository provides reusable NixOS modules for deploying and managing an integrated observability stack. It is designed to be consumed by other NixOS flakes while remaining independently configurable, testable and maintainable.
+## Quick start
 
-The stack brings together:
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-26.05";
+    observability = {
+      url = "github:Temhr/observability/v0.3.0";   # pin a release tag, never a branch
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
 
-<strong>Prometheus</strong> — Metrics collection, monitoring and alerting.
-<strong>Grafana</strong> — Dashboards and visualisation.
-<strong>Loki</strong> — Log aggregation and querying.
-<strong>Alloy</strong> — Metrics and log collection.
-<strong>Alertmanager</strong> — Alert routing and notifications.
-<strong>ntfy</strong> — Notification delivery.
+  outputs = {nixpkgs, observability, ...}: {
+    nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        observability.nixosModules.default
+        {
+          services.observability.enable = true;
 
-It also provides shared configuration, service integration, dashboards, alert rules, operational scripts, runbooks and validation.
+          # Secrets are file paths; use sops-nix, agenix or anything that puts a file on disk.
+          services.observability-alertmanager.environmentFile = "/run/secrets/alertmanager.env";
+          services.observability-grafana.credentialsFile = "/run/secrets/grafana-admin-password";
+          services.observability-grafana.secretKeyFile = "/run/secrets/grafana-secret-key";
+        }
+      ];
+    };
+  };
+}
+```
 
-<h2>Design principles</h2>
+That is a complete, working stack. Nothing leaves loopback until you ask (see [Exposure](#exposure)); a complete example is in [`examples/minimal`](examples/minimal/flake.nix). Without the Grafana secret files it still works but warns that Grafana is using its insecure built-in secret key.
 
-<strong>Declarative:</strong> Configuration and infrastructure are defined through NixOS modules.
-<strong>Modular:</strong> Services can be enabled and configured independently or composed as a complete stack.
-<strong>Self-contained:</strong> Required helpers, defaults, options and integration logic are maintained within this repository.
-<strong>Decoupled:</strong> No dependency on consumer-specific host metadata, users, networking or internal libraries.
-<strong>Composable:</strong> Public modules and options provide explicit integration points for consuming flakes.
-<strong>Idempotent:</strong> Repeated evaluation and deployment produce consistent system configuration.
-<strong>Secure by default:</strong> Service hardening, permissions and network exposure follow explicit security policies.
-<strong>Testable:</strong> Configuration generation, alert rules, dashboards and integrations are validated independently.
+## What you get
 
-<h2>Architecture</h2>
+| | |
+|---|---|
+| **Metrics** | Prometheus scraping itself, node_exporter, the other stack services and anything you add; optional smartctl, blackbox (HTTP, ICMP, TCP, TLS, DNS) and systemd exporters |
+| **Logs** | Alloy ships the journal, `/var/log/*.log` and the maintenance log to Loki |
+| **Dashboards** | Grafana with Prometheus, Loki and Alertmanager datasources pre-provisioned, a system overview dashboard and an opt-in ZFS dashboard |
+| **Alerting** | Alertmanager routing to ntfy topics (priority, tags, per-category topics), inhibition rules, Prometheus alerts plus four Loki-ruler log alerts |
+| **Runbooks** | One page per alert in [`docs/runbooks`](docs/runbooks/), linked from the notification; CI refuses an alert without one |
+| **Maintenance log** | A `maintenance-log` command that records manual maintenance as JSON lines, ships it to Loki (kept two years) and exports "last completed" metrics |
+| **Backups** | A nightly consistent copy of Grafana's and ntfy's databases, Alertmanager's state and the maintenance log |
+| **Self-healing** | Quarantine of a corrupt WAL for Prometheus and Loki, a guard for a Prometheus TSDB whose clock went wrong, services ordered after time sync |
 
-The repository owns the observability implementation and its operational lifecycle.
-<figure class="table">
-  <table>
-    <tbody>
-      <tr>
-        <th>Responsibility</th>
-        <th>Ownership</th>
-      </tr>
-      <tr>
-        <th>Service modules and configuration</th>
-        <th>This repository</th>
-      </tr>
-      <tr>
-        <th>Stack aggregation and service integration</th>
-        <th>This repository</th>
-      </tr>
-      <tr>
-        <th>Shared helpers and defaults</th>
-        <th>This repository</th>
-      </tr>
-      <tr>
-        <th>Dashboards, alerts and runbooks</th>
-        <th>This repository</th>
-      </tr>
-      <tr>
-        <th>Operational scripts and validation</th>
-        <th>This repository</th>
-      </tr>
-      <tr>
-        <th>Host identity and machine metadata</th>
-        <th>Consumer</th>
-      </tr>
-      <tr>
-        <th>User and group policy</th>
-        <th>Consumer</th>
-      </tr>
-      <tr>
-        <th>Network topology and firewall policy</th>
-        <th>Consumer</th>
-      </tr>
-      <tr>
-        <th>Storage provisioning and backup destinations</th>
-        <th>Consumer</th>
-      </tr>
-      <tr>
-        <th>Encrypted secrets and age identities</th>
-        <th>Consumer</th>
-      </tr>
-      <tr>
-        <th>Host profiles and deployment policy</th>
-        <th>Consumer</th>
-      </tr>
-    </tbody>
-  </table>
-</figure>
+Default ports: Prometheus 9090, Alertmanager 9093, Grafana 3101, Loki 3100 (gRPC 9096, loopback), ntfy 2586, Alloy 12345 (loopback), node 9100, smartctl 9633, blackbox 9115.
 
-The public interface is defined through exported flake outputs and documented NixOS options. Internal implementation details should not be required by consumers.
+## Modules
 
-<h2>Usage</h2>
+Importing a module starts nothing; each one has an `enable`. They can be imported alone, together, or through the aggregator, in any combination.
 
-Add this repository as a flake input and import the desired exported NixOS modules into your system configuration.
+| Module (`observability.nixosModules.<name>`) | Purpose | Options under |
+|---|---|---|
+| `default` (= `stack--observability`) | the whole stack, wired together | `services.observability` |
+| `servc--observability-prometheus` | metrics, rules, exporters | `services.observability-prometheus` |
+| `servc--observability-alertmanager` | routing, inhibition, receivers | `services.observability-alertmanager` |
+| `servc--observability-ntfy` | push notification server | `services.observability-ntfy` |
+| `servc--observability-loki` | log store and LogQL ruler | `services.observability-loki` |
+| `servc--observability-alloy` | log shipper | `services.observability-alloy` |
+| `servc--observability-grafana` | dashboards | `services.observability-grafana` |
+| `systm--observability-host-exporters` | node and smartctl exporters | `services.observability-host-exporters` |
+| `systm--observability-maintenance-log` | maintenance log and its metrics | `services.observability-maintenance-log` |
+| `systm--observability-backup` | state backups | `services.observability-backup` |
+| `nsops--observability-alertmanager`, `nsops--observability-grafana` | **optional** [sops-nix](https://github.com/Mic92/sops-nix) wiring | adds `secretsFile` |
 
-The stack is disabled by default. Consumers decide which services or integrations to enable and provide host-specific configuration through the public options.
+The full option list, with defaults and descriptions, is generated from the code: [`docs/reference/options.md`](docs/reference/options.md).
 
-A consuming flake may provide thin adapter modules to translate its own host metadata, port assignments, user policy and network configuration into the observability interface.
+## Configuring the stack
 
-See <a href="docs/operations/installation.md">Installation</a> and <a href="docs/architecture/public-api.md">Public API</a>.
+The aggregator exposes a small, deliberate surface; each service's own options stay available for anything else.
 
-<h2>Repository structure</h2>
+```nix
+services.observability = {
+  enable = true;
 
-The repository is organised around independently maintained NixOS modules, shared internals, flake composition and supporting operational assets.
+  # Reachability: see "Exposure" below
+  access.interfaces = [ "eno1" ];
+  access.expose = [ "grafana" "ntfy" "prometheus" ];     # the default
 
-<code>flake/</code> — Flake composition, outputs and development tooling.
-<code>modules/</code> — NixOS service modules and stack integration.
-<code>lib/</code> — Internal helper functions.
-<code>config/</code> — Dashboards, alert rules and service assets.
-<code>scripts/</code> — Operational and maintenance utilities.
-<code>tests/</code> — Evaluation, configuration and integration tests.
-<code>docs/</code> — Architecture, operations, development guides and runbooks.
+  # Links in notifications and UIs, and what to probe
+  publicHost = "192.0.2.10";
+  probes.gateway = "192.0.2.1";
+  probes.icmpTargets = [ "192.0.2.20" ];
+  probes.tcpTargets = [ "127.0.0.1:8123" ];
 
-<h2>Development and validation</h2>
+  dataDir = "/data";                                      # each service gets a subdirectory
 
-The repository maintains its own development environment and CI checks.
+  prometheus = {
+    maintenance.enable = true;                            # full alert set, smartctl/blackbox exporters
+    scrapeInterval = "60s"; retention = "7d"; retentionSize = "4GB";
+  };
+  loki = { retention = "168h"; maintenance.enable = true; };
 
-Validation should cover:
+  notifications = {
+    ntfyAuth.enable = true;                               # alertmanager (write) and reader (read) users
+    topics.storage.matchers = [ ''category=~"storage|backup"'' ];   # also published to <topic>-storage
+  };
 
-Flake evaluation and module composition.
+  integrations.traefik.enable = true;                     # extra scrape job + matching alerts
+};
 
-* Individual service and full-stack configurations.
-* Rendered service configuration.
-* Prometheus and Alertmanager rules.
-* Dashboard provisioning and consistency.
-* Optional integrations and feature combinations.
-* Operational scripts and runbook coverage.
-* Compatibility with supported nixpkgs versions.
+services.observability-prometheus.maintenance.expectedMounts = [ "/data" ];     # alert if a mount is missing
+services.observability-grafana.extraDashboards = [ "zfs-monitoring" ];
+```
 
-See <a href="docs/development/testing.md">Testing</a>.
+Tunables the stack sets are overridable either through `services.observability.*` or directly on the service (`services.observability-loki.*`). Wiring (datasources, scrape jobs, receivers) is additive: extend it with the services' `extraScrapeConfigs`, `receivers`, `route.routes`, `provisioning.datasources` and so on rather than replacing it.
 
-<h2>Documentation</h2>
+## Exposure
 
-<a href="docs/architecture/overview.md">Architecture overview</a>
+Everything binds to loopback. A service leaves loopback only if it is listed in `access.expose` **and** an interface is named in `access.interfaces`; the firewall is then opened for those ports on those interfaces only. `openFirewall` (all interfaces) exists for compatibility and is discouraged. Interface names must be non-empty; omit interfaces the machine doesn't have.
 
-<a href="docs/architecture/module-boundaries.md">Module boundaries</a>
+> **Security note.** Prometheus, Loki and Alertmanager have **no authentication** here. Grafana has a login. ntfy is open to anyone who can reach it unless you set `notifications.ntfyAuth.enable = true`. Expose only on interfaces you trust, or put them behind a reverse proxy (`domain` on a service enables an nginx virtual host, and **opens ports 80 and 443** when `openFirewall` is on).
 
-<a href="docs/architecture/public-api.md">Public API</a>
+## Host prerequisites
 
-<a href="docs/architecture/security-model.md">Security model</a>
+Documented rather than enforced:
 
-<a href="docs/operations/installation.md">Installation</a>
+- the state root (`dataDir`, default `/data`) is mounted before the stack starts; the permission fixers wait for the mount
+- `time-sync.target` really means the clock is set (Prometheus refuses samples from a clock that jumps); a laptop that may boot offline should not block on it
+- journald, for log shipping
+- nginx only if a service sets `domain`; a firewall only if you use `access.interfaces` or `openFirewall`
+- SMART monitoring needs real disks and the exporter's access to them; ZFS member alerts need the textfile metrics described in [`docs/operations/zfs-metrics.md`](docs/operations/zfs-metrics.md)
 
-<a href="docs/operations/backup-restore.md">Backup and restore</a>
+## Secrets
 
-<a href="docs/operations/troubleshooting.md">Troubleshooting</a>
+No module references a secret manager. They take **file paths**: `services.observability-alertmanager.environmentFile` (KEY=VALUE, referenced as `$KEY` in receivers, so nothing enters the Nix store), `services.observability-grafana.credentialsFile` and `secretKeyFile`, and `services.observability.notifications.ntfyAuth.environmentFile` (defaults to Alertmanager's file; holds `NTFY_ALERTMANAGER_PASSWORD` and `NTFY_READER_PASSWORD`). If you use sops-nix, import the two `nsops--observability-*` modules and set `secretsFile`; they declare the secrets, set owners, and restart the right units when a secret changes. The repository ships no encrypted material. Rotation procedures: [`docs/operations/secret-rotation.md`](docs/operations/secret-rotation.md).
 
-<a href="docs/development/adding-a-component.md">Adding a component</a>
+## Alerts
 
-<a href="docs/runbooks/">Runbooks</a>
+About 60 Prometheus alerts, grouped by the sections of a maintenance checklist (hardware, storage, OS, backups, network and security, services, containers, probes, observability self-health, SMART, filesystem, ZFS, battery), each labelled with `severity`, `category` and `checklist_section`, and carrying the exact expression that fired it as a `condition` label. Core groups (stack self-health, recording rules) always load; the rest load with `prometheus.maintenance.enable`, and rules that depend on an optional exporter load only when that integration is on. Alerts on metrics that don't exist stay silent. Log alerts (OOM kills, filesystem errors, SSH failure bursts, optionally NVIDIA Xid) are evaluated by Loki's ruler.
 
-<h2>Compatibility and releases</h2>
+Browse them in [`docs/architecture/`](docs/architecture/) and their runbooks in [`docs/runbooks/`](docs/runbooks/).
 
-The repository is independently versioned. Consumers should pin a release or commit through their flake lock file.
+## Operating it
 
-Public module names, option definitions, persistent state paths, service identities and secret interfaces are treated as compatibility contracts. Breaking changes should be documented with migration guidance.
-<hr>
+Helper scripts ship as flake outputs and bring their own tools:
 
-<strong>Objective:</strong> Provide a cohesive, reusable and independently maintained observability platform for NixOS without coupling its implementation to the infrastructure that consumes it.
+```bash
+nix run github:Temhr/observability/v0.3.0#mon-check                   # units, endpoints, scrape targets, rules, Alertmanager link, Loki
+nix run github:Temhr/observability/v0.3.0#mon-check -- --fire-test   # end to end: alert → Alertmanager → ntfy
+nix run github:Temhr/observability/v0.3.0#mon-snapshot -- /tmp/before # generated configs and units, for before/after diffs
+sudo maintenance-log --section II.4 --task "Applied updates" --status completed
+```
+`--fire-test` needs `MON_NTFY_AUTH=reader:<password>` when ntfy auth is on. More in [`docs/operations/`](docs/operations/): backup and restore, monitoring the monitor, upgrading.
+
+## Testing
+
+`nix flake check` builds and validates, on three fake machines (stable nixpkgs with sops-nix, unstable, and a consumer with no sops-nix at all):
+
+- rendered Prometheus, Alertmanager, Loki and Alloy configuration (`promtool`, `amtool`, `loki -verify-config`, `alloy fmt`)
+- every alert rule, rule unit tests, and runbook coverage for both Prometheus and Loki alerts
+- dashboards (uids, thresholds, units), the helper scripts (shellcheck), pinned port defaults
+- contract tests: importing modules twice is harmless, the side effects of setting `domain` are unchanged, the generated options reference and the docs links are current
+
+`nix build .#vm-smoke` boots a NixOS VM with the full stack and checks every endpoint and that no scrape target is down (needs KVM). Details: [`docs/development/testing.md`](docs/development/testing.md).
+
+## Stability and versioning
+
+Pre-1.0: a minor release may break. The public interface is the exported module names, the documented options, persistent state paths, service identities (units, users, uids) and the secret-file interface; see [`docs/architecture/public-api.md`](docs/architecture/public-api.md). Everything else (`self.lib.*`, `_internals/`, the helper library) is internal. Renamed options and modules keep working for one minor release and print a warning. Every release is listed in [`CHANGELOG.md`](CHANGELOG.md); design decisions are recorded as [ADRs](docs/architecture/decisions/).
+
+Supported: `x86_64-linux`, tested against `nixos-26.05` and `nixos-unstable`.
+
+## Contributing
+
+- Write the test first: a failing check, then the change.
+- A new alert needs a runbook (`docs/runbooks/<Alert>.md`, from `_template.md`), a rule test, and the right `requires` gate if it depends on an optional exporter.
+- New files must be `git add`ed before `nix` can see them; run `nix fmt` and `nix flake check` before you push.
+- Anything specific to one deployment (host names, addresses, hardware you alone have) belongs in the consumer's adapter, not here. A CI check fails if nixlab-internal names creep back in.
+
+Extending the stack (scrape targets, probes, dashboards, receivers, alerts): [`docs/development/extending.md`](docs/development/extending.md).
+
+## Documentation
+
+[`docs/README.md`](docs/README.md) is the index. In short: [architecture and public API](docs/architecture/), [options reference](docs/reference/options.md), [operations](docs/operations/), [runbooks](docs/runbooks/), [development](docs/development/).
+
+## Licence
+
+TODO: add a `LICENSE` file and name the licence here.
