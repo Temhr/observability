@@ -604,7 +604,7 @@
         ];
       };
 
-      # The helper follows Loki's maintenance settings so the file Alloy tails and the file the helper writes are the same.
+      # The helper follows loki.maintenance.enable; Alloy tails its logPath.
       services.maintenance-log-nixlab = {
         enable = lib.mkDefault cfg.loki.maintenance.enable;
         textfileDir = lib.mkIf cfg.prometheus.maintenance.enable svc.host-exporters-nixlab.nodeExporter.textfileDir;
