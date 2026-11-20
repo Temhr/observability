@@ -60,22 +60,23 @@
     ];
   };
 
-  limits_config = {
-    retention_period = cfg.retention;
-    max_query_series = 10000;
-    max_query_lookback = "17520h";
-    # Guardrails: a runaway unit must not fill /data on a laptop.
-    ingestion_rate_mb = 4;
-    ingestion_burst_size_mb = 8;
-    per_stream_rate_limit = "3MB";
-    per_stream_rate_limit_burst = "10MB";
-    reject_old_samples = true;
-    reject_old_samples_max_age = "168h";
-    max_entries_limit_per_query = 5000;
-  }
-  // lib.optionalAttrs (cfg.retentionStreams != []) {
-    retention_stream = map (s: {inherit (s) selector priority period;}) cfg.retentionStreams;
-  };
+  limits_config =
+    {
+      retention_period = cfg.retention;
+      max_query_series = 10000;
+      max_query_lookback = "17520h";
+      # Guardrails: a runaway unit must not fill /data on a laptop.
+      ingestion_rate_mb = 4;
+      ingestion_burst_size_mb = 8;
+      per_stream_rate_limit = "3MB";
+      per_stream_rate_limit_burst = "10MB";
+      reject_old_samples = true;
+      reject_old_samples_max_age = "168h";
+      max_entries_limit_per_query = 5000;
+    }
+    // lib.optionalAttrs (cfg.retentionStreams != []) {
+      retention_stream = map (s: {inherit (s) selector priority period;}) cfg.retentionStreams;
+    };
 
   compactor = {
     working_directory = "${cfg.dataDir}/compactor";
