@@ -168,12 +168,6 @@
       self.nixosModules.servc--ntfy-nixlab
       self.nixosModules.systm--maintenance-log-nixlab
       self.nixosModules.systm--observability-backup-nixlab
-      # Remove in 0.3
-      (lib.mkRenamedOptionModule ["services" "loki-nixlab" "alloyPort"] ["services" "alloy-nixlab" "port"])
-      (lib.mkRenamedOptionModule ["services" "loki-nixlab" "alloyPackage"] ["services" "alloy-nixlab" "package"])
-      (lib.mkRenamedOptionModule ["services" "loki-nixlab" "enableAlloy"] ["services" "alloy-nixlab" "enable"])
-      (lib.mkRenamedOptionModule ["services" "loki-nixlab" "maintenance" "enable"] ["services" "maintenance-log-nixlab" "enable"])
-      (lib.mkRenamedOptionModule ["services" "loki-nixlab" "maintenance" "logPath"] ["services" "maintenance-log-nixlab" "logPath"])
     ];
 
     options.services.nixlab-observability = {

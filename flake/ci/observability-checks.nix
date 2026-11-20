@@ -37,14 +37,6 @@
       external = harness.mkTestHost {modules = [harness.fullStack harness.withoutSops];};
       # smallest possible: only `enable = true`
       minimal = harness.mkTestHost {modules = [harness.minimalStack];};
-      # An old-style setting must still reach its new home.
-      alias = harness.mkTestHost {
-        modules = [
-          harness.minimalStack
-          {services.loki-nixlab.alloyPort = 12999;}
-        ];
-      };
-      # >>> SPOT B: a new host entry goes here (after `minimal`, or after `alias`)
       domain = harness.mkTestHost {
         modules = [
           harness.minimalStack
@@ -60,7 +52,6 @@
         ];
       };
     };
-    # >>> SPOT A: a new `let` binding goes here (after `hosts = {…};`, before `in`)
     domainEffects = let
       c = hosts.domain.config;
     in {
@@ -70,7 +61,6 @@
       failingAssertions = map (a: a.message) (lib.filter (a: !a.assertion) c.assertions);
     };
   in {
-    # >>> SPOT C: a new top-level attribute goes here (packages.* …), above `checks =`
     packages.fingerprint = let
       c = hosts.stable.config;
       pick = names: set: lib.filterAttrs (n: _: builtins.elem n names) set;
@@ -156,7 +146,6 @@
           hostConfig = hosts.${name}.config;
         }) {} ["stable" "unstable" "external"])
       // {
-        # >>> SPOT D: a new check goes here, directly under this `// {` line
         golden-domain-effects = pkgs.runCommand "golden-domain-effects" {nativeBuildInputs = [pkgs.jq pkgs.diffutils];} ''
           jq -S . ${toJson "got.json" domainEffects} > got.json
           jq -S . ${./_golden}/domain-effects.json > want.json
@@ -233,11 +222,6 @@
             fi
             touch $out
           '';
-
-        alias-alloyport = pkgs.runCommand "alias-alloyport" {} ''
-          test "${toString hosts.alias.config.services.alloy-nixlab.port}" = "12999"
-          touch $out
-        '';
 
         runbook-url-consistent = pkgs.runCommand "runbook-url-consistent" {} ''
           test "${hosts.minimal.config.services.prometheus-nixlab.runbookBaseUrl}" = "${(prometheusMaintenanceAlerts {features = allFeatures;}).runbookBase or hosts.minimal.config.services.prometheus-nixlab.runbookBaseUrl}"
