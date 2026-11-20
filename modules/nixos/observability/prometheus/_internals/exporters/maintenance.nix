@@ -47,7 +47,7 @@
   mkBackupExporterScript = pkgs.writeShellScript "backup-exporter" ''
     set -euo pipefail
 
-    METRICS_DIR="/var/lib/node_exporter"
+    METRICS_DIR="${config.services.host-exporters-nixlab.nodeExporter.textfileDir}"
     METRICS_FILE="$METRICS_DIR/backup_metrics.prom"
     mkdir -p "$METRICS_DIR"
 

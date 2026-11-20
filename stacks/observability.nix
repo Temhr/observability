@@ -600,7 +600,7 @@
       # The helper follows Loki's maintenance settings so the file Alloy tails and the file the helper writes are the same.
       services.maintenance-log-nixlab = {
         enable = lib.mkDefault cfg.loki.maintenance.enable;
-        textfileDir = lib.mkIf cfg.prometheus.maintenance.enable "/var/lib/node_exporter";
+        textfileDir = lib.mkIf cfg.prometheus.maintenance.enable svc.host-exporters-nixlab.nodeExporter.textfileDir;
       };
 
       services.alloy-nixlab = {
@@ -619,7 +619,8 @@
           ++ lib.optional (svc.ntfy-nixlab.cacheFile != "") svc.ntfy-nixlab.cacheFile
           ++ lib.optional svc.ntfy-nixlab.auth.enable "${svc.ntfy-nixlab.dataDir}/user.db";
         plainFiles = [
-          "/var/lib/private/alertmanager"
+          # Upstream Alertmanager runs with DynamicUser, so its real state lives under /var/lib/private/<StateDirectory>.
+          "/var/lib/private/${config.systemd.services.alertmanager.serviceConfig.StateDirectory or "alertmanager"}"
           svc.maintenance-log-nixlab.logPath
         ];
       };

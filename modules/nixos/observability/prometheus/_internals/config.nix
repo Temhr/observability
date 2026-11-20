@@ -18,7 +18,7 @@ in {
       "d ${cfg.dataDir} 0770 prometheus prometheus -"
     ]
     ++ lib.optionals cfg.maintenance.enable [
-      "d /var/lib/node_exporter 0755 prometheus prometheus -"
+      "d ${config.services.host-exporters-nixlab.nodeExporter.textfileDir} 0755 prometheus prometheus -"
     ];
 
   # User configuration
