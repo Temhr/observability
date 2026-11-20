@@ -14,3 +14,4 @@ Rules:
 | [006](ADR-006-helper-ownership.md) | Helper ownership | Accepted |
 | [008](ADR-008-exposure.md) | Network exposure policy | Accepted |
 | [009](ADR-009-secrets.md) | Secrets integration | Accepted |
+| [010](ADR-010-final-names.md) | Final names | Accepted |
