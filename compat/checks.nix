@@ -1,5 +1,14 @@
-{self, inputs, lib, ...}: {
-  perSystem = {pkgs, system, ...}: let
+{
+  self,
+  inputs,
+  lib,
+  ...
+}: {
+  perSystem = {
+    pkgs,
+    system,
+    ...
+  }: let
     harness = import ../flake/ci/_harness {inherit inputs self;};
     nm = self.nixosModules;
     newNames = ["default" "servc--observability-prometheus" "servc--observability-alertmanager" "servc--observability-ntfy" "servc--observability-loki" "servc--observability-alloy" "servc--observability-grafana" "systm--observability-host-exporters" "systm--observability-maintenance-log" "systm--observability-backup" "nsops--observability-alertmanager" "nsops--observability-grafana"];
