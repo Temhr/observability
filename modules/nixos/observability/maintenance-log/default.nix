@@ -1,8 +1,8 @@
-{...}: {
+{self, ...}: {
   # Exposed for flake/ci/observability-checks.nix (shellcheck).
   flake.lib.maintenanceLoggerScript = ./maintenance-logger.sh;
 
-  flake.nixosModules.systm--maintenance-log-nixlab = {
+  flake.nixosModules.systm--maintenance-log-nixlab = self.lib.obsLib.keyed "observability:maintenance-log" ({
     config,
     lib,
     pkgs,
@@ -116,5 +116,5 @@
         };
       })
     ]);
-  };
+  });
 }

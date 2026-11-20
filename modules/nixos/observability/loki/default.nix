@@ -8,7 +8,7 @@
       inherit lib;
     };
 
-  flake.nixosModules.servc--loki-nixlab = {
+  flake.nixosModules.servc--loki-nixlab = self.lib.obsLib.keyed "observability:loki" ({
     config,
     lib,
     pkgs,
@@ -322,5 +322,5 @@
         group = cfg.group;
       })
     ]);
-  };
+  });
 }

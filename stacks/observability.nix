@@ -1,5 +1,5 @@
 {self, ...}: {
-  flake.nixosModules.stack--observability = {
+  flake.nixosModules.stack--observability = self.lib.obsLib.keyed "observability:stacks" ({
     config,
     lib,
     ...
@@ -686,5 +686,5 @@
         "127.0.0.1:${toString port.alertmanager}"
       ];
     };
-  };
+  });
 }

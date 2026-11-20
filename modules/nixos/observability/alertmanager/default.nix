@@ -1,5 +1,5 @@
 {self, ...}: {
-  flake.nixosModules.servc--alertmanager-nixlab = {
+  flake.nixosModules.servc--alertmanager-nixlab = self.lib.obsLib.keyed "observability:alertmanager" ({
     config,
     lib,
     pkgs,
@@ -579,5 +579,5 @@
           }
           ++ lib.optionals (cfg.clusterPeers != []) [cfg.clusterPort]);
     };
-  };
+  });
 }

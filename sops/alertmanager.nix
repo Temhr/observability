@@ -1,5 +1,5 @@
-{...}: {
-  flake.nixosModules.nsops--alertmanager = {
+{self, ...}: {
+  flake.nixosModules.nsops--alertmanager = self.lib.obsLib.keyed "observability:sops-alertmanager" ({
     config,
     lib,
     ...
@@ -48,5 +48,5 @@
       services.alertmanager-nixlab.environmentFile =
         config.sops.secrets.ALERTMANAGER_ENV.path;
     };
-  };
+  });
 }

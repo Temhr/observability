@@ -1,5 +1,5 @@
 {self, ...}: {
-  flake.nixosModules.servc--ntfy-nixlab = {
+  flake.nixosModules.servc--ntfy-nixlab = self.lib.obsLib.keyed "observability:ntfy" ({
     config,
     lib,
     pkgs,
@@ -549,5 +549,5 @@
           }
           ++ lib.optionals cfg.smtp.enable [(lib.toInt (lib.last (lib.splitString ":" cfg.smtp.listenAddress)))]);
     };
-  };
+  });
 }

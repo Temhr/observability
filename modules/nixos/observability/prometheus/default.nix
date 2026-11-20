@@ -1,5 +1,5 @@
 {self, ...}: {
-  flake.nixosModules.servc--prometheus-nixlab = {
+  flake.nixosModules.servc--prometheus-nixlab = self.lib.obsLib.keyed "observability:prometheus" ({
     config,
     lib,
     pkgs,
@@ -28,7 +28,7 @@
         group = "prometheus";
       })
     ]);
-  };
+  });
 
   # Exposed for flake/ci/observability-checks.nix, which consumes them by name.
   flake.lib.prometheusRendered = import ./_internals/rendered.nix;

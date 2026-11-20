@@ -2,7 +2,7 @@
   # Exposed for flake/ci/observability-checks.nix (dashboard lint).
   flake.lib.grafanaDashboards = ./dashboards;
 
-  flake.nixosModules.servc--grafana-nixlab = {
+  flake.nixosModules.servc--grafana-nixlab = self.lib.obsLib.keyed "observability:grafana" ({
     config,
     lib,
     pkgs,
@@ -662,5 +662,5 @@
           servicePort = cfg.port;
         });
     };
-  };
+  });
 }

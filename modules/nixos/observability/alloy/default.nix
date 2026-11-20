@@ -8,7 +8,7 @@
     })
     + cfg.extraConfig;
 
-  flake.nixosModules.servc--alloy-nixlab = {
+  flake.nixosModules.servc--alloy-nixlab = self.lib.obsLib.keyed "observability:alloy" ({
     config,
     lib,
     pkgs,
@@ -144,5 +144,5 @@
         '';
       };
     };
-  };
+  });
 }

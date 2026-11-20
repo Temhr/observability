@@ -1,5 +1,5 @@
 {self, ...}: {
-  flake.nixosModules.systm--host-exporters-nixlab = {
+  flake.nixosModules.systm--host-exporters-nixlab = self.lib.obsLib.keyed "observability:host-exporters" ({
     config,
     lib,
     pkgs,
@@ -133,5 +133,5 @@
         };
       })
     ];
-  };
+  });
 }

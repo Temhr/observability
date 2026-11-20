@@ -1,5 +1,5 @@
-{...}: {
-  flake.nixosModules.systm--observability-backup-nixlab = {
+{self, ...}: {
+  flake.nixosModules.systm--observability-backup-nixlab = self.lib.obsLib.keyed "observability:backup" ({
     config,
     lib,
     pkgs,
@@ -60,5 +60,5 @@
         };
       };
     };
-  };
+  });
 }

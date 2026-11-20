@@ -1,5 +1,5 @@
-{...}: {
-  flake.nixosModules.nsops--grafana = {
+{self, ...}: {
+  flake.nixosModules.nsops--grafana = self.lib.obsLib.keyed "observability:sops-grafana" ({
     config,
     lib,
     ...
@@ -36,5 +36,5 @@
         secretKeyFile = lib.mkDefault config.sops.secrets.GRAFANA_SECRET_KEY.path;
       };
     };
-  };
+  });
 }
