@@ -372,7 +372,7 @@
             services.observability-grafana.extraDashboards references JSON files that do
             not exist in the module's dashboards/ directory:
               ${lib.concatStringsSep "\n  " (map (n: "${n}.json") missing)}
-            Add the missing files to modules/nixos/observability/grafana/dashboards/ and run
+            Add the missing files to modules/nixos/grafana/dashboards/ and run
             `git add` so the flake can see them.
           '';
         }
