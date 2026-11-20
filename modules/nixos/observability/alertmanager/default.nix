@@ -142,7 +142,6 @@
       cfg.extraConfig;
   in {
     imports = [
-      self.nixosModules.systm--ports-alertmanager
     ];
     # ============================================================================
     # OPTIONS - Define what can be configured

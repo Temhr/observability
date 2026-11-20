@@ -45,7 +45,6 @@
       cfg.auth.users;
   in {
     imports = [
-      self.nixosModules.systm--ports-ntfy
     ];
     # ============================================================================
     # OPTIONS - Define what can be configured

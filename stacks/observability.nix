@@ -7,8 +7,8 @@
     cfg = config.services.nixlab-observability;
     svc = config.services;
 
-    # Resolved ports. Single source of truth: ports.nix (mkDefault) or a plain
-    # assignment in a host file. The stack never owns port numbers.
+    # Resolved ports. Single source of truth: each service's option default, or a plain assignment in a host file.
+    # The stack never owns port numbers.
     port = {
       grafana = svc.grafana-nixlab.port;
       loki = svc.loki-nixlab.port;
@@ -405,7 +405,7 @@
       #     OR directly on services.<x>-nixlab.* — both work.
       #   * Wiring (datasources, scrape jobs, receivers, alertmanagerTargets) is plain and
       #     additive; extend it, don't replace it.
-      #   * Ports are never set here; see ports.nix / host plain assignment.
+      #   * Ports are never set here.
 
       services.grafana-nixlab = {
         enable = true;

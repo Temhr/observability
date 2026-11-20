@@ -18,7 +18,6 @@
     obsLib = self.lib.obsLib;
   in {
     imports = [
-      self.nixosModules.systm--ports-loki
     ];
     # ============================================================================
     # OPTIONS - Define what can be configured

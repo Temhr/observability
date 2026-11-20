@@ -12,7 +12,6 @@
     prometheusConfig = import ./_internals/config.nix {inherit config lib pkgs obsLib;};
   in {
     imports = [
-      self.nixosModules.systm--ports-prometheus
       self.nixosModules.systm--host-exporters-nixlab
     ];
 
