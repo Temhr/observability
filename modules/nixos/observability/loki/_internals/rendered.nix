@@ -62,13 +62,6 @@
 
   limits_config = {
     retention_period = cfg.retention;
-    retention_stream = [
-      {
-        selector = ''{job="maintenance-log"}'';
-        priority = 1;
-        period = "17520h";
-      }
-    ];
     max_query_series = 10000;
     max_query_lookback = "17520h";
     # Guardrails: a runaway unit must not fill /data on a laptop.
@@ -79,6 +72,9 @@
     reject_old_samples = true;
     reject_old_samples_max_age = "168h";
     max_entries_limit_per_query = 5000;
+  }
+  // lib.optionalAttrs (cfg.retentionStreams != []) {
+    retention_stream = map (s: {inherit (s) selector priority period;}) cfg.retentionStreams;
   };
 
   compactor = {

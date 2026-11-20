@@ -37,6 +37,12 @@
         example = "/var/lib/node_exporter";
         description = "node_exporter textfile directory; when set, completion metrics are written there every 5 minutes.";
       };
+
+      lokiJob = lib.mkOption {
+        type = lib.types.str;
+        default = "maintenance-log";
+        description = "Value of the Loki `job` label for this log. Consumers that ship the file must label it with this. The bundled system-overview dashboard (panels 431 and 432) queries the default value.";
+      };
     };
 
     config = lib.mkIf cfg.enable (lib.mkMerge [

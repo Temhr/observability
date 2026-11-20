@@ -147,6 +147,18 @@
           default = false;
           description = "Open the gRPC port in the firewall. Only needed for multi-instance Loki deployments.";
         };
+
+        retentionStreams = lib.mkOption {
+          type = lib.types.listOf (lib.types.submodule {
+            options = {
+              selector = lib.mkOption {type = lib.types.str; example = ''{job="audit"}'';};
+              period = lib.mkOption {type = lib.types.str; example = "17520h";};
+              priority = lib.mkOption {type = lib.types.int; default = 1;};
+            };
+          });
+          default = [];
+          description = "Per-stream retention overrides (rendered into limits_config.retention_stream).";
+        };
       };
     };
 

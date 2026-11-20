@@ -73,7 +73,7 @@
         // Constant labels
         stage.static_labels {
           values = {
-            job  = "maintenance-log",
+            job  = "${svc.maintenance-log-nixlab.lokiJob}",
             host = "${config.networking.hostName}",
           }
         }
@@ -424,6 +424,13 @@
         dataDir = lib.mkDefault "${cfg.dataDir}/loki";
         openFirewall = lib.mkDefault cfg.openFirewall;
         retention = lib.mkDefault cfg.loki.retention;
+        retentionStreams = [
+          {
+            selector = ''{job="${svc.maintenance-log-nixlab.lokiJob}"}'';
+            priority = 1;
+            period = "17520h";
+          }
+        ];
       };
 
       services.prometheus-nixlab = {
