@@ -1,5 +1,9 @@
 {self, ...}: {
-  perSystem = {pkgs, system, ...}: {
+  perSystem = {
+    pkgs,
+    system,
+    ...
+  }: {
     # A package, not a check: `nix flake check` should not need KVM. CI runs it explicitly (Part 9).
     packages = pkgs.lib.optionalAttrs (system == "x86_64-linux") {
       vm-smoke = pkgs.testers.runNixOSTest {

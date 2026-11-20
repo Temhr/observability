@@ -61,7 +61,9 @@
       };
     };
     # >>> SPOT A: a new `let` binding goes here (after `hosts = {…};`, before `in`)
-    domainEffects = let c = hosts.domain.config; in {
+    domainEffects = let
+      c = hosts.domain.config;
+    in {
       nginxEnabled = c.services.nginx.enable;
       vhosts = builtins.attrNames c.services.nginx.virtualHosts;
       firewallTcp = c.networking.firewall.allowedTCPPorts;
@@ -77,28 +79,73 @@
         pkgs.writeText name (builtins.unsafeDiscardStringContext (builtins.toJSON value));
     in
       pkgs.linkFarm "fingerprint" [
-        {name = "units.json"; path = dump "units.json" (lib.mapAttrs (_: s: {
-          inherit (s) serviceConfig;
-          after = s.after or [];
-          wants = s.wants or [];
-          requires = s.requires or [];
-          preStart = s.preStart or "";
-          script = s.script or "";
-        }) (pick unitNames c.systemd.services));}
-        {name = "users.json"; path = dump "users.json" (lib.mapAttrs (_: u: {inherit (u) uid group extraGroups;}) (pick ["loki" "prometheus" "grafana" "ntfy" "alloy"] c.users.users));}
-        {name = "firewall.json"; path = dump "firewall.json" {inherit (c.networking.firewall) allowedTCPPorts interfaces;};}
-        {name = "tmpfiles.json"; path = dump "tmpfiles.json" c.systemd.tmpfiles.rules;}
-        {name = "prometheus.json"; path = dump "prometheus.json" (self.lib.prometheusRendered {config = c; lib = pkgs.lib;});}
-        {name = "alertmanager.json"; path = dump "alertmanager.json" c.services.prometheus.alertmanager.configuration;}
-        {name = "loki-ruler.json"; path = dump "loki-ruler.json" c.services.loki-nixlab.ruler.groups;}
-        {name = "datasources.json"; path = dump "datasources.json" c.services.grafana-nixlab.provisioning.datasources;}
-        {name = "loki.json"; path = dump "loki.json" (self.lib.lokiRendered {config = c; lib = pkgs.lib;});}
-        {name = "alloy.alloy"; path = dump "alloy.alloy" (self.lib.alloyRendered {config = c; lib = pkgs.lib;});}
-        {name = "sops.json"; path = dump "sops.json" (lib.mapAttrs (_: s: {inherit (s) owner restartUnits;}) c.sops.secrets);}
+        {
+          name = "units.json";
+          path = dump "units.json" (lib.mapAttrs (_: s: {
+            inherit (s) serviceConfig;
+            after = s.after or [];
+            wants = s.wants or [];
+            requires = s.requires or [];
+            preStart = s.preStart or "";
+            script = s.script or "";
+          }) (pick unitNames c.systemd.services));
+        }
+        {
+          name = "users.json";
+          path = dump "users.json" (lib.mapAttrs (_: u: {inherit (u) uid group extraGroups;}) (pick ["loki" "prometheus" "grafana" "ntfy" "alloy"] c.users.users));
+        }
+        {
+          name = "firewall.json";
+          path = dump "firewall.json" {inherit (c.networking.firewall) allowedTCPPorts interfaces;};
+        }
+        {
+          name = "tmpfiles.json";
+          path = dump "tmpfiles.json" c.systemd.tmpfiles.rules;
+        }
+        {
+          name = "prometheus.json";
+          path = dump "prometheus.json" (self.lib.prometheusRendered {
+            config = c;
+            lib = pkgs.lib;
+          });
+        }
+        {
+          name = "alertmanager.json";
+          path = dump "alertmanager.json" c.services.prometheus.alertmanager.configuration;
+        }
+        {
+          name = "loki-ruler.json";
+          path = dump "loki-ruler.json" c.services.loki-nixlab.ruler.groups;
+        }
+        {
+          name = "datasources.json";
+          path = dump "datasources.json" c.services.grafana-nixlab.provisioning.datasources;
+        }
+        {
+          name = "loki.json";
+          path = dump "loki.json" (self.lib.lokiRendered {
+            config = c;
+            lib = pkgs.lib;
+          });
+        }
+        {
+          name = "alloy.alloy";
+          path = dump "alloy.alloy" (self.lib.alloyRendered {
+            config = c;
+            lib = pkgs.lib;
+          });
+        }
+        {
+          name = "sops.json";
+          path = dump "sops.json" (lib.mapAttrs (_: s: {inherit (s) owner restartUnits;}) c.sops.secrets);
+        }
       ];
 
     packages.goldens = pkgs.linkFarm "goldens" [
-      {name = "domain-effects.json"; path = toJson "domain-effects.json" domainEffects;}
+      {
+        name = "domain-effects.json";
+        path = toJson "domain-effects.json" domainEffects;
+      }
     ];
     checks = lib.optionalAttrs (system == "x86_64-linux") (
       # prom-config-<h>, prom-rules-<h>, alertmanager-config-<h> for each of these three
