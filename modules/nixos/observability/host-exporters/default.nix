@@ -1,11 +1,11 @@
 {self, ...}: {
-  flake.nixosModules.systm--host-exporters-nixlab = self.lib.obsLib.keyed "observability:host-exporters" ({
+  flake.nixosModules.systm--observability-host-exporters = self.lib.obsLib.keyed "observability:host-exporters" ({
     config,
     lib,
     pkgs,
     ...
   }: let
-    cfg = config.services.host-exporters-nixlab;
+    cfg = config.services.observability-host-exporters;
     obsLib = self.lib.obsLib;
     node = cfg.nodeExporter;
 
@@ -26,7 +26,7 @@
         "--collector.textfile.directory=${node.textfileDir}"
       ]);
   in {
-    options.services.host-exporters-nixlab = {
+    options.services.observability-host-exporters = {
       user = lib.mkOption {
         type = lib.types.str;
         default = "prometheus";

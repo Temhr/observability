@@ -4,17 +4,17 @@
     lib,
   }:
     import ./_internals/rendered.nix {
-      cfg = config.services.loki-nixlab;
+      cfg = config.services.observability-loki;
       inherit lib;
     };
 
-  flake.nixosModules.servc--loki-nixlab = self.lib.obsLib.keyed "observability:loki" ({
+  flake.nixosModules.servc--observability-loki = self.lib.obsLib.keyed "observability:loki" ({
     config,
     lib,
     pkgs,
     ...
   }: let
-    cfg = config.services.loki-nixlab;
+    cfg = config.services.observability-loki;
     obsLib = self.lib.obsLib;
   in {
     imports = [
@@ -23,7 +23,7 @@
     # OPTIONS - Define what can be configured
     # ============================================================================
     options = {
-      services.loki-nixlab = {
+      services.observability-loki = {
         # REQUIRED: Enable the service
         enable = lib.mkEnableOption "Loki log aggregation system";
 
@@ -182,11 +182,11 @@
         assertions = [
           (obsLib.mkSslAssertion {
             inherit (cfg) enableSSL domain;
-            moduleName = "services.loki-nixlab";
+            moduleName = "services.observability-loki";
           })
           {
             assertion = !cfg.ruler.enable || cfg.ruler.alertmanagerUrl != null;
-            message = "services.loki-nixlab.ruler.enable needs services.loki-nixlab.ruler.alertmanagerUrl.";
+            message = "services.observability-loki.ruler.enable needs services.observability-loki.ruler.alertmanagerUrl.";
           }
         ];
 

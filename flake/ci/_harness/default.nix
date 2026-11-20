@@ -27,31 +27,31 @@ in {
   withSops = {pkgs, ...}: {
     imports = [
       inputs.sops-nix.nixosModules.sops
-      self.nixosModules.nsops--alertmanager
-      self.nixosModules.nsops--grafana
+      self.nixosModules.nsops--observability-alertmanager
+      self.nixosModules.nsops--observability-grafana
     ];
     sops.age.keyFile = "/var/lib/sops-nix/key.txt";
     sops.validateSopsFiles = false;
-    services.alertmanager-nixlab.secretsFile = pkgs.writeText "alertmanager.env" "";
-    services.grafana-nixlab.secretsFile = pkgs.writeText "grafana.yaml" "";
+    services.observability-alertmanager.secretsFile = pkgs.writeText "alertmanager.env" "";
+    services.observability-grafana.secretsFile = pkgs.writeText "grafana.yaml" "";
   };
 
   # A stranger with some other secret manager: no sops-nix in the module set at all.
   withoutSops = {
-    services.alertmanager-nixlab.environmentFile = "/run/secrets/alertmanager.env";
-    services.grafana-nixlab.credentialsFile = "/run/secrets/grafana-admin";
-    services.grafana-nixlab.secretKeyFile = "/run/secrets/grafana-secret-key";
+    services.observability-alertmanager.environmentFile = "/run/secrets/alertmanager.env";
+    services.observability-grafana.credentialsFile = "/run/secrets/grafana-admin";
+    services.observability-grafana.secretKeyFile = "/run/secrets/grafana-secret-key";
   };
 
   fullStack = {
     users.users.testuser.isNormalUser = true;
-    services.loki-nixlab.extraUsers = ["testuser"];
-    services.grafana-nixlab.extraUsers = ["testuser"];
-    services.alloy-nixlab.extraUsers = ["testuser"];
-    services.ntfy-nixlab.extraUsers = ["testuser"];
-    services.prometheus-nixlab.extraUsers = ["testuser"];
+    services.observability-loki.extraUsers = ["testuser"];
+    services.observability-grafana.extraUsers = ["testuser"];
+    services.observability-alloy.extraUsers = ["testuser"];
+    services.observability-ntfy.extraUsers = ["testuser"];
+    services.observability-prometheus.extraUsers = ["testuser"];
 
-    services.nixlab-observability = {
+    services.observability = {
       enable = true;
       publicHost = "192.0.2.10";
       probes.gateway = "192.0.2.1";
@@ -69,5 +69,5 @@ in {
     };
   };
 
-  minimalStack = {services.nixlab-observability.enable = true;};
+  minimalStack = {services.observability.enable = true;};
 }

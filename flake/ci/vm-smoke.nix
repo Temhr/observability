@@ -10,7 +10,7 @@
         name = "observability-smoke";
         nodes.machine = {...}: {
           imports = [self.nixosModules.stack--observability];
-          services.nixlab-observability.enable = true;
+          services.observability.enable = true;
           virtualisation.memorySize = 4096;
           virtualisation.diskSize = 4096;
         };

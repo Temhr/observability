@@ -3,7 +3,7 @@
   lib,
   pkgs,
 }: let
-  cfg = config.services.prometheus-nixlab;
+  cfg = config.services.observability-prometheus;
 
   blackboxConfig = pkgs.writeText "blackbox.yml" ''
     modules:
@@ -47,7 +47,7 @@
   mkBackupExporterScript = pkgs.writeShellScript "backup-exporter" ''
     set -euo pipefail
 
-    METRICS_DIR="${config.services.host-exporters-nixlab.nodeExporter.textfileDir}"
+    METRICS_DIR="${config.services.observability-host-exporters.nodeExporter.textfileDir}"
     METRICS_FILE="$METRICS_DIR/backup_metrics.prom"
     mkdir -p "$METRICS_DIR"
 

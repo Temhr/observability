@@ -1,11 +1,11 @@
 {self, ...}: {
-  flake.nixosModules.servc--alertmanager-nixlab = self.lib.obsLib.keyed "observability:alertmanager" ({
+  flake.nixosModules.servc--observability-alertmanager = self.lib.obsLib.keyed "observability:alertmanager" ({
     config,
     lib,
     pkgs,
     ...
   }: let
-    cfg = config.services.alertmanager-nixlab;
+    cfg = config.services.observability-alertmanager;
     obsLib = self.lib.obsLib;
 
     # ── Submodule types ────────────────────────────────────────────────────────
@@ -147,7 +147,7 @@
     # OPTIONS - Define what can be configured
     # ============================================================================
     options = {
-      services.alertmanager-nixlab = {
+      services.observability-alertmanager = {
         enable = lib.mkEnableOption "Prometheus Alertmanager";
 
         port = lib.mkOption {
@@ -211,7 +211,7 @@
         };
 
         # Path to a KEY=VALUE environment file injected into the Alertmanager
-        # process at startup. Populated by the companion nsops--alertmanager
+        # process at startup. Populated by the companion nsops--observability-alertmanager
         # module; set manually if you manage secrets another way.
         # Alertmanager expands $VAR references in the config YAML at startup,
         # so secrets never need to appear in the Nix store.
@@ -221,7 +221,7 @@
           description = ''
             Path to a file containing KEY=VALUE pairs injected into the
             Alertmanager process environment. Intended to be set by the
-            companion nsops--alertmanager module via sops-nix.
+            companion nsops--observability-alertmanager module via sops-nix.
 
             When set, use $KEY references in receiver configs to keep secrets
             out of the store, and set checkConfig = false.
@@ -363,7 +363,7 @@
             same attrset.
 
             Reference secrets as $ENV_VAR strings; inject values at runtime
-            via the companion nsops--alertmanager sops module.
+            via the companion nsops--observability-alertmanager sops module.
 
             See https://prometheus.io/docs/alerting/latest/configuration/#receiver
           '';
@@ -479,7 +479,7 @@
       assertions = [
         (obsLib.mkSslAssertion {
           inherit (cfg) enableSSL domain;
-          moduleName = "services.alertmanager-nixlab";
+          moduleName = "services.observability-alertmanager";
         })
         {
           # Every receiver name referenced by a route must be defined.
@@ -494,7 +494,7 @@
             referenced = [cfg.defaultReceiver] ++ map (r: r.receiver) cfg.route.routes;
             missing = builtins.filter (r: !(builtins.elem r defined)) referenced;
           in ''
-            services.alertmanager-nixlab: the following receiver names are
+            services.observability-alertmanager: the following receiver names are
             referenced in routes but not defined in cfg.receivers:
               ${lib.concatStringsSep "\n  " missing}
           '';
@@ -504,16 +504,16 @@
           # visible to the Nix sandbox.
           assertion = !(cfg.environmentFile != null && cfg.checkConfig);
           message = ''
-            services.alertmanager-nixlab: environmentFile is set but
+            services.observability-alertmanager: environmentFile is set but
             checkConfig is still true. The Nix sandbox cannot read the
             secrets file so amtool check-config will fail at build time.
-            Set services.alertmanager-nixlab.checkConfig = false.
+            Set services.observability-alertmanager.checkConfig = false.
           '';
         }
         {
           assertion = cfg.clusterPeers == [] || cfg.openFirewall;
           message = ''
-            services.alertmanager-nixlab: clusterPeers is set but
+            services.observability-alertmanager: clusterPeers is set but
             openFirewall is false. The cluster gossip port
             (${toString cfg.clusterPort}) must be reachable from peers.
             Set openFirewall = true or open the port manually.

@@ -2,13 +2,13 @@
   # Exposed for flake/ci/observability-checks.nix (dashboard lint).
   flake.lib.grafanaDashboards = ./dashboards;
 
-  flake.nixosModules.servc--grafana-nixlab = self.lib.obsLib.keyed "observability:grafana" ({
+  flake.nixosModules.servc--observability-grafana = self.lib.obsLib.keyed "observability:grafana" ({
     config,
     lib,
     pkgs,
     ...
   }: let
-    cfg = config.services.grafana-nixlab;
+    cfg = config.services.observability-grafana;
     obsLib = self.lib.obsLib;
 
     # The module's own dashboards directory — all JSON files live here.
@@ -99,7 +99,7 @@
     # ============================================================================
     # OPTIONS
     # ============================================================================
-    options.services.grafana-nixlab = {
+    options.services.observability-grafana = {
       enable = lib.mkEnableOption "Grafana monitoring and visualization platform";
 
       port = lib.mkOption {
@@ -259,11 +259,11 @@
 
           Example — enable the ZFS dashboard on a host that has ZFS:
 
-            services.grafana-nixlab.extraDashboards = [ "zfs-monitoring" ];
+            services.observability-grafana.extraDashboards = [ "zfs-monitoring" ];
 
           Example — enable multiple extra dashboards:
 
-            services.grafana-nixlab.extraDashboards = [
+            services.observability-grafana.extraDashboards = [
               "zfs-monitoring"
               "docker"
               "nginx"
@@ -346,13 +346,13 @@
     config = lib.mkIf cfg.enable {
       warnings =
         lib.optional (cfg.secretKeyFile == null)
-        "services.grafana-nixlab: secretKeyFile is not set, so Grafana uses its insecure built-in default secret_key.";
+        "services.observability-grafana: secretKeyFile is not set, so Grafana uses its insecure built-in default secret_key.";
 
       # Guard: catch unknown dashboard names before anything tries to run.
       assertions = [
         (obsLib.mkSslAssertion {
           inherit (cfg) enableSSL domain;
-          moduleName = "services.grafana-nixlab";
+          moduleName = "services.observability-grafana";
         })
         {
           assertion =
@@ -369,7 +369,7 @@
               )
               cfg.extraDashboards;
           in ''
-            services.grafana-nixlab.extraDashboards references JSON files that do
+            services.observability-grafana.extraDashboards references JSON files that do
             not exist in the module's dashboards/ directory:
               ${lib.concatStringsSep "\n  " (map (n: "${n}.json") missing)}
             Add the missing files to modules/nixos/observability/grafana/dashboards/ and run
@@ -386,7 +386,7 @@
             baseKeys = builtins.attrNames cfg.dashboards;
             dupes = builtins.filter (k: builtins.elem k baseKeys) cfg.extraDashboards;
           in ''
-            services.grafana-nixlab.extraDashboards names that clash with
+            services.observability-grafana.extraDashboards names that clash with
             built-in dashboards: ${lib.concatStringsSep ", " dupes}.
             These are already provisioned by default; remove them from
             extraDashboards.

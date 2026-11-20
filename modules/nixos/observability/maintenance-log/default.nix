@@ -2,13 +2,13 @@
   # Exposed for flake/ci/observability-checks.nix (shellcheck).
   flake.lib.maintenanceLoggerScript = ./maintenance-logger.sh;
 
-  flake.nixosModules.systm--maintenance-log-nixlab = self.lib.obsLib.keyed "observability:maintenance-log" ({
+  flake.nixosModules.systm--observability-maintenance-log = self.lib.obsLib.keyed "observability:maintenance-log" ({
     config,
     lib,
     pkgs,
     ...
   }: let
-    cfg = config.services.maintenance-log-nixlab;
+    cfg = config.services.observability-maintenance-log;
     checklist = import ./_internals/checklist.nix;
     checklistFile = pkgs.writeText "maintenance-checklist.tsv" (
       lib.concatMapStringsSep "\n" (s: "${s.code}\t${s.name}\t${s.hint}") checklist
@@ -22,7 +22,7 @@
       '')
       checklist;
   in {
-    options.services.maintenance-log-nixlab = {
+    options.services.observability-maintenance-log = {
       enable = lib.mkEnableOption "maintenance task logging helper";
 
       logPath = lib.mkOption {
@@ -50,7 +50,7 @@
         assertions = [
           {
             assertion = !(lib.hasSuffix ".log" cfg.logPath);
-            message = "services.maintenance-log-nixlab.logPath must not end in .log (it would also be tailed by the /var/log/*.log pipeline and ingested twice).";
+            message = "services.observability-maintenance-log.logPath must not end in .log (it would also be tailed by the /var/log/*.log pipeline and ingested twice).";
           }
         ];
 

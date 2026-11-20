@@ -2,7 +2,7 @@
   config,
   lib,
 }: let
-  cfg = config.services.prometheus-nixlab;
+  cfg = config.services.observability-prometheus;
 
   # Helper for blackbox exporter jobs
   mkBlackboxJob = jobName: module: targets: {
@@ -43,7 +43,7 @@
       job_name = "node";
       static_configs = [
         {
-          targets = ["localhost:${toString config.services.host-exporters-nixlab.nodeExporter.port}"];
+          targets = ["localhost:${toString config.services.observability-host-exporters.nodeExporter.port}"];
           labels = {
             instance = "localhost";
             alias = config.networking.hostName;

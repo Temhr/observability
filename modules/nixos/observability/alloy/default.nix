@@ -1,6 +1,6 @@
 {self, ...}: {
   flake.lib.alloyRendered = {config, ...}: let
-    cfg = config.services.alloy-nixlab;
+    cfg = config.services.observability-alloy;
   in
     (import ./_internals/rendered.nix {
       inherit cfg;
@@ -8,13 +8,13 @@
     })
     + cfg.extraConfig;
 
-  flake.nixosModules.servc--alloy-nixlab = self.lib.obsLib.keyed "observability:alloy" ({
+  flake.nixosModules.servc--observability-alloy = self.lib.obsLib.keyed "observability:alloy" ({
     config,
     lib,
     pkgs,
     ...
   }: let
-    cfg = config.services.alloy-nixlab;
+    cfg = config.services.observability-alloy;
     obsLib = self.lib.obsLib;
 
     baseAlloyConfig = import ./_internals/rendered.nix {
@@ -25,7 +25,7 @@
     alloyConfig = baseAlloyConfig + cfg.extraConfig;
     configFile = pkgs.writeText "alloy-config.alloy" alloyConfig;
   in {
-    options.services.alloy-nixlab = {
+    options.services.observability-alloy = {
       enable = lib.mkEnableOption "Grafana Alloy log collector";
 
       port = lib.mkOption {

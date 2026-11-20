@@ -4,7 +4,7 @@
   pkgs,
   obsLib,
 }: let
-  cfg = config.services.prometheus-nixlab;
+  cfg = config.services.observability-prometheus;
   externalUrlFlag = lib.optionalString (cfg.externalUrl != null) " --web.external-url=${cfg.externalUrl}";
   retentionSizeFlag = lib.optionalString (cfg.retentionSize != null) " --storage.tsdb.retention.size=${cfg.retentionSize}";
   rendered = import ../rendered.nix {inherit config lib;};

@@ -13,9 +13,9 @@
         (harness.mkTestHost {
           modules = [
             harness.minimalStack
-            self.nixosModules.servc--loki-nixlab
-            self.nixosModules.servc--grafana-nixlab
-            self.nixosModules.servc--prometheus-nixlab
+            self.nixosModules.servc--observability-loki
+            self.nixosModules.servc--observability-grafana
+            self.nixosModules.servc--observability-prometheus
           ];
         }).config.system.build.toplevel;
     };

@@ -43,12 +43,12 @@
           harness.minimalStack
           {
             # All five service modules declare `domain`. openFirewall = true makes the golden capture the 80/443 rules too.
-            services.nixlab-observability.openFirewall = true;
-            services.loki-nixlab.domain = "loki.example.test";
-            services.prometheus-nixlab.domain = "prometheus.example.test";
-            services.alertmanager-nixlab.domain = "alertmanager.example.test";
-            services.grafana-nixlab.domain = "grafana.example.test";
-            services.ntfy-nixlab.domain = "ntfy.example.test";
+            services.observability.openFirewall = true;
+            services.observability-loki.domain = "loki.example.test";
+            services.observability-prometheus.domain = "prometheus.example.test";
+            services.observability-alertmanager.domain = "alertmanager.example.test";
+            services.observability-grafana.domain = "grafana.example.test";
+            services.observability-ntfy.domain = "ntfy.example.test";
           }
         ];
       };
@@ -108,11 +108,11 @@
         }
         {
           name = "loki-ruler.json";
-          path = dump "loki-ruler.json" c.services.loki-nixlab.ruler.groups;
+          path = dump "loki-ruler.json" c.services.observability-loki.ruler.groups;
         }
         {
           name = "datasources.json";
-          path = dump "datasources.json" c.services.grafana-nixlab.provisioning.datasources;
+          path = dump "datasources.json" c.services.observability-grafana.provisioning.datasources;
         }
         {
           name = "loki.json";
@@ -176,7 +176,7 @@
 
         loki-runbook-coverage = pkgs.runCommand "loki-runbook-coverage" {nativeBuildInputs = [pkgs.jq];} ''
           jq -r '[.. | objects | .alert? // empty] | unique[]' \
-            ${toJson "loki-groups.json" hosts.stable.config.services.loki-nixlab.ruler.groups} > alerts.txt
+            ${toJson "loki-groups.json" hosts.stable.config.services.observability-loki.ruler.groups} > alerts.txt
           [ -s alerts.txt ] || { echo "found no Loki alerts: did the structure change?"; exit 1; }
           missing=0
           for a in $(cat alerts.txt); do
@@ -191,17 +191,17 @@
         port-defaults = let
           s = hosts.minimal.config.services;
           got = {
-            ntfy = s.ntfy-nixlab.port;
-            loki = s.loki-nixlab.port;
-            lokiGrpc = s.loki-nixlab.grpcPort;
-            grafana = s.grafana-nixlab.port;
-            prometheus = s.prometheus-nixlab.port;
-            blackbox = s.prometheus-nixlab.blackboxPort;
-            smartctl = s.prometheus-nixlab.smartctlPort;
-            systemdExporter = s.prometheus-nixlab.systemdExporterPort;
-            alertmanager = s.alertmanager-nixlab.port;
-            alertmanagerCluster = s.alertmanager-nixlab.clusterPort;
-            alloy = s.alloy-nixlab.port;
+            ntfy = s.observability-ntfy.port;
+            loki = s.observability-loki.port;
+            lokiGrpc = s.observability-loki.grpcPort;
+            grafana = s.observability-grafana.port;
+            prometheus = s.observability-prometheus.port;
+            blackbox = s.observability-prometheus.blackboxPort;
+            smartctl = s.observability-prometheus.smartctlPort;
+            systemdExporter = s.observability-prometheus.systemdExporterPort;
+            alertmanager = s.observability-alertmanager.port;
+            alertmanagerCluster = s.observability-alertmanager.clusterPort;
+            alloy = s.observability-alloy.port;
           };
           want = {
             ntfy = 2586;
@@ -228,7 +228,7 @@
           '';
 
         runbook-url-consistent = pkgs.runCommand "runbook-url-consistent" {} ''
-          test "${hosts.minimal.config.services.prometheus-nixlab.runbookBaseUrl}" = "${(prometheusMaintenanceAlerts {features = allFeatures;}).runbookBase or hosts.minimal.config.services.prometheus-nixlab.runbookBaseUrl}"
+          test "${hosts.minimal.config.services.observability-prometheus.runbookBaseUrl}" = "${(prometheusMaintenanceAlerts {features = allFeatures;}).runbookBase or hosts.minimal.config.services.observability-prometheus.runbookBaseUrl}"
           touch $out
         '';
 

@@ -1,11 +1,11 @@
 {self, ...}: {
-  flake.nixosModules.servc--ntfy-nixlab = self.lib.obsLib.keyed "observability:ntfy" ({
+  flake.nixosModules.servc--observability-ntfy = self.lib.obsLib.keyed "observability:ntfy" ({
     config,
     lib,
     pkgs,
     ...
   }: let
-    cfg = config.services.ntfy-nixlab;
+    cfg = config.services.observability-ntfy;
     obsLib = self.lib.obsLib;
 
     userSubmodule = lib.types.submodule {
@@ -50,7 +50,7 @@
     # OPTIONS - Define what can be configured
     # ============================================================================
     options = {
-      services.ntfy-nixlab = {
+      services.observability-ntfy = {
         # REQUIRED: Enable the service
         enable = lib.mkEnableOption "ntfy push notification server";
 
@@ -307,24 +307,24 @@
       assertions = [
         (obsLib.mkSslAssertion {
           inherit (cfg) enableSSL domain;
-          moduleName = "services.ntfy-nixlab";
+          moduleName = "services.observability-ntfy";
         })
         {
           assertion = cfg.auth.users == [] || (cfg.auth.enable && cfg.auth.environmentFile != null);
-          message = "services.ntfy-nixlab.auth.users needs auth.enable = true and auth.environmentFile set.";
+          message = "services.observability-ntfy.auth.users needs auth.enable = true and auth.environmentFile set.";
         }
         {
           assertion = !(cfg.smtp.enable && cfg.smtp.domain == "");
           message = ''
-            services.ntfy-nixlab.smtp.enable requires services.ntfy-nixlab.smtp.domain
+            services.observability-ntfy.smtp.enable requires services.observability-ntfy.smtp.domain
             to be set to the domain whose MX record points at this server.
           '';
         }
         {
           assertion = !(cfg.attachments.enable && cfg.cacheFile == "");
           message = ''
-            services.ntfy-nixlab.attachments.enable requires a persistent cache.
-            Set services.ntfy-nixlab.cacheFile to a path such as
+            services.observability-ntfy.attachments.enable requires a persistent cache.
+            Set services.observability-ntfy.cacheFile to a path such as
             "${cfg.dataDir}/cache.db" so attachment metadata survives restarts.
           '';
         }

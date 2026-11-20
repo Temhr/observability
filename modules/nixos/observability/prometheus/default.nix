@@ -1,21 +1,21 @@
 {self, ...}: {
-  flake.nixosModules.servc--prometheus-nixlab = self.lib.obsLib.keyed "observability:prometheus" ({
+  flake.nixosModules.servc--observability-prometheus = self.lib.obsLib.keyed "observability:prometheus" ({
     config,
     lib,
     pkgs,
     ...
   }: let
-    cfg = config.services.prometheus-nixlab;
+    cfg = config.services.observability-prometheus;
     obsLib = self.lib.obsLib;
 
     options = import ./_internals/options.nix {inherit lib pkgs;};
     prometheusConfig = import ./_internals/config.nix {inherit config lib pkgs obsLib;};
   in {
     imports = [
-      self.nixosModules.systm--host-exporters-nixlab
+      self.nixosModules.systm--observability-host-exporters
     ];
 
-    options.services.prometheus-nixlab = options;
+    options.services.observability-prometheus = options;
 
     config = lib.mkIf cfg.enable (lib.mkMerge [
       prometheusConfig

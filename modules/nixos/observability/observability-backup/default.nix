@@ -1,13 +1,13 @@
 {self, ...}: {
-  flake.nixosModules.systm--observability-backup-nixlab = self.lib.obsLib.keyed "observability:backup" ({
+  flake.nixosModules.systm--observability-backup = self.lib.obsLib.keyed "observability:backup" ({
     config,
     lib,
     pkgs,
     ...
   }: let
-    cfg = config.services.observability-backup-nixlab;
+    cfg = config.services.observability-backup;
   in {
-    options.services.observability-backup-nixlab = {
+    options.services.observability-backup = {
       enable = lib.mkEnableOption "consistent copies of the observability stack's state";
 
       dir = lib.mkOption {

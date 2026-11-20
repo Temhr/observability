@@ -5,7 +5,7 @@
   obsLib,
   ...
 }: let
-  cfg = config.services.prometheus-nixlab;
+  cfg = config.services.observability-prometheus;
 
   # Import specialized configurations
   prometheusService = import ./services/prometheus.nix {inherit config lib pkgs obsLib;};
@@ -18,7 +18,7 @@ in {
       "d ${cfg.dataDir} 0770 prometheus prometheus -"
     ]
     ++ lib.optionals cfg.maintenance.enable [
-      "d ${config.services.host-exporters-nixlab.nodeExporter.textfileDir} 0755 prometheus prometheus -"
+      "d ${config.services.observability-host-exporters.nodeExporter.textfileDir} 0755 prometheus prometheus -"
     ];
 
   # User configuration
@@ -99,8 +99,8 @@ in {
     };
   };
 
-  # The node and smartctl exporters live in systm--host-exporters-nixlab; map Prometheus' options onto it.
-  services.host-exporters-nixlab = {
+  # The node and smartctl exporters live in systm--observability-host-exporters; map Prometheus' options onto it.
+  services.observability-host-exporters = {
     nodeExporter.enable = lib.mkDefault cfg.enableNodeExporter;
     nodeExporter.textfileDir = lib.mkIf cfg.maintenance.enable "/var/lib/node_exporter";
     smartctl.enable = lib.mkDefault (cfg.maintenance.enable && cfg.maintenance.exporters.smartctl.enable);
