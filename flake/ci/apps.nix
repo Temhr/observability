@@ -1,13 +1,24 @@
 {...}: {
-  perSystem = {pkgs, ...}: let
-    mk = name: file: {
-      type = "app";
-      meta.description = "Observability ${name}";
-      program = toString (pkgs.writeShellScript name (builtins.readFile file));
-    };
+  perSystem = {pkgs, lib, ...}: let
+    common = with pkgs; [bash coreutils gnugrep gnused gawk curl jq iproute2 findutils];
+    mk = {name, file, extra ? [], exclude ? []}:
+      pkgs.writeShellApplication {
+        inherit name;
+        runtimeInputs = common ++ extra;
+        excludeShellChecks = exclude;
+        text = builtins.readFile file;
+      };
+    scripts = {
+      mon-check = mk {name = "mon-check"; file = ../../bin/mon-check.sh; exclude = ["SC2015"];};
+      mon-snapshot = mk {name = "mon-snapshot"; file = ../../bin/mon-snapshot.sh;};
+      mon-unitdiff = mk {name = "mon-unitdiff"; file = ../../bin/mon-unitdiff.sh; extra = [pkgs.diffutils]; exclude = ["SC2035"];};
+      };
   in {
-    apps.mon-check = mk "mon-check" ../../bin/mon-check.sh;
-    apps.mon-snapshot = mk "mon-snapshot" ../../bin/mon-snapshot.sh;
-    apps.mon-unitdiff = mk "mon-unitdiff" ../../bin/mon-unitdiff.sh;
+    packages = scripts;
+    apps = lib.mapAttrs (n: p: {
+      type = "app";
+      program = lib.getExe p;
+      meta.description = "Observability ${n}";
+    }) scripts;
   };
 }
