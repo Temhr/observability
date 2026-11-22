@@ -42,7 +42,18 @@
           "text": "http://localhost:9090",
           "value": "http://localhost:9090"
         }
-      }
+      },
+        {
+          "name": "timers_regex",
+          "label": "Timers",
+          "type": "constant",
+          "query": "nixos-upgrade.timer|nix-gc.timer",
+          "hide": 2,
+          "current": {
+            "text": "nixos-upgrade.timer|nix-gc.timer",
+            "value": "nixos-upgrade.timer|nix-gc.timer"
+          }
+        }
     ]
   },
   "panels": [
@@ -3595,7 +3606,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "time() - node_systemd_timer_last_trigger_seconds{name=~\"nixos-upgrade.timer|flake-update.timer|backup-home.timer|nixlab-gpull.timer|nix-gc.timer\"}",
+          "expr": "time() - node_systemd_timer_last_trigger_seconds{name=~\"${timers_regex}\"}",
           "legendFormat": "{{instance}} {{name}}",
           "instant": true,
           "datasource": {
@@ -3639,7 +3650,7 @@
           "values": false
         }
       },
-      "description": "How long since each listed systemd timer (nixos-upgrade, flake-update, backup-home, nixlab-gpull, nix-gc) last triggered. A value far beyond the timer's schedule means it is stuck, disabled or failing to run."
+      "description": "How long since each systemd timer matching the dashboard variable timers_regex last triggered. A value far beyond the timer's schedule means it is stuck, disabled or failing to run."
     },
     {
       "type": "row",

@@ -2803,7 +2803,7 @@ attribute set of (submodule)
 {
   system-overview-v5 = {
     folder = "maintenance";
-    path = "/nix/store/4vviv6yn1ba7a1rjq0h13p9q9ppbb0w0-dashboards/system-overview-v5.json";
+    path = "/nix/store/34cxgwl28fa2khgys78adxgd81jwpgdy-dashboards/system-overview-v5.json";
   };
 }
 ```
@@ -3501,6 +3501,38 @@ absolute path
 
 
 
+## services\.observability-grafana\.timersRegex
+
+
+
+Regular expression of systemd timer names shown in the system-overview dashboard’s “Time since each timer last fired” panel (written into the dashboard’s timers_regex variable)\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+"nixos-upgrade.timer|nix-gc.timer"
+```
+
+
+
+*Example:*
+
+```nix
+"nixos-upgrade.timer|backup.timer"
+```
+
+*Declared by:*
+ - [\<nixpkgs/modules/nixos/grafana/default\.nix, via option flake\.nixosModules\.servc--observability-grafana>](https://github.com/NixOS/nixpkgs/blob//modules/nixos/grafana/default.nix, via option flake.nixosModules.servc--observability-grafana)
+
+
+
 ## services\.observability-grafana\.uid
 
 
@@ -3802,8 +3834,6 @@ string
 
 ## services\.observability-loki\.enable
 
-
-
 Whether to enable Loki log aggregation system\.
 
 
@@ -3833,6 +3863,8 @@ true
 
 
 ## services\.observability-loki\.enableSSL
+
+
 
 Enable HTTPS with Let’s Encrypt (requires domain)
 
@@ -6567,8 +6599,6 @@ true
 
 ## services\.observability-prometheus\.port
 
-
-
 Port for Prometheus to listen on
 
 
@@ -6590,6 +6620,8 @@ Port for Prometheus to listen on
 
 
 ## services\.observability-prometheus\.retention
+
+
 
 How long to retain metrics data
 

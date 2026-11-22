@@ -278,6 +278,13 @@
         description = "Prometheus URL written into the dashboards' prometheus_url variable (used by the Open in Prometheus links). Must be reachable from the browser.";
       };
 
+      timersRegex = lib.mkOption {
+        type = lib.types.str;
+        default = "nixos-upgrade.timer|nix-gc.timer";
+        example = "nixos-upgrade.timer|backup.timer";
+        description = "Regular expression of systemd timer names shown in the system-overview dashboard's \"Time since each timer last fired\" panel (written into the dashboard's timers_regex variable).";
+      };
+
       # ── Datasource auto-provisioning ─────────────────────────────────────────
       provisioning.datasources = lib.mkOption {
         type = lib.types.listOf (lib.types.submodule {
@@ -613,8 +620,9 @@
                 + lib.concatStringsSep "\n" (lib.mapAttrsToList (name: dashboard: ''
                     # ── dashboard: ${name} ──
                     if [ -f ${dashboard.path} ]; then
-                      ${pkgs.jq}/bin/jq --arg u "${cfg.prometheusUrl}" \
-                        '(.templating.list[]? | select(.name=="prometheus_url")) |= (.query=$u | .current={text:$u,value:$u})' \
+                      ${pkgs.jq}/bin/jq --arg u "${cfg.prometheusUrl}" --arg t "${cfg.timersRegex}" \
+                        '(.templating.list[]? | select(.name=="prometheus_url")) |= (.query=$u | .current={text:$u,value:$u})
+                          | (.templating.list[]? | select(.name=="timers_regex")) |= (.query=$t | .current={text:$t,value:$t})' \
                         ${dashboard.path} > ${cfg.dataDir}/dashboards/${name}/dashboard.json.tmp
                       chmod 644 ${cfg.dataDir}/dashboards/${name}/dashboard.json.tmp
                       mv ${cfg.dataDir}/dashboards/${name}/dashboard.json.tmp ${cfg.dataDir}/dashboards/${name}/dashboard.json
