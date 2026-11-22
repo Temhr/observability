@@ -9,7 +9,7 @@
 2. `ps aux --sort=-%mem | head -15`
 3. `cat /proc/pressure/memory`
 
-**Fix.** Find and limit the offender (`MemoryMax=` in its unit), or add RAM. On `nixnas1`, check the ARC size with `grep -E '^(size|c_max)' /proc/spl/kstat/zfs/arcstats` and cap it with `zfs_arc_max` if needed.
+**Fix.** Find and limit the offender (`MemoryMax=` in its unit), or add RAM. On `<host>`, check the ARC size with `grep -E '^(size|c_max)' /proc/spl/kstat/zfs/arcstats` and cap it with `zfs_arc_max` if needed.
 
 **Escalate when.** Swap is filling or OOM kills begin.
 

@@ -9,7 +9,7 @@
 2. `sudo smartctl -a /dev/disk/by-id/<device>` for each disk
 3. `zpool events -v | tail -80`
 
-**Fix.** Restore the listed files from backup, or delete them if they can be regenerated (`/mirror` may also have a copy on the mirror peer, nixnas2). Make sure the pool is healthy again (`ZpoolNotOnline` resolved, resilver finished), then run `sudo zpool scrub tanks`. The error list is cleared after a clean scrub (sometimes it takes two); `sudo zpool clear tanks` after that.
+**Fix.** Restore the listed files from backup, or delete them if they can be regenerated (`/mirror` may also have a copy on the mirror peer). Make sure the pool is healthy again (`ZpoolNotOnline` resolved, resilver finished), then run `sudo zpool scrub tanks`. The error list is cleared after a clean scrub (sometimes it takes two); `sudo zpool clear tanks` after that.
 
 **Notes.** An error against a file name that no longer exists means the file was already deleted; the entry disappears after a scrub.
 

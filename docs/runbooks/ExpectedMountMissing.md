@@ -7,7 +7,7 @@
 **First three commands.**
 1. `findmnt <mountpoint>` and `systemctl list-units --type=mount --state=failed`
 2. `journalctl -b | grep -i <mountpoint> | tail -20`
-3. `zpool status` (for `/mirror` on `nixnas1`) or `lsblk -f` (for other disks)
+3. `zpool status` (for `/mirror` on `<host>`) or `lsblk -f` (for other disks)
 
 **Fix.** Start the mount unit (`sudo systemctl start <unit>`) or import the pool, and fix whatever stopped it. Make sure nothing keeps writing into the bare directory on the root disk while it is unmounted.
 
