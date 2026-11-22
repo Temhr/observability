@@ -168,7 +168,6 @@
       self.nixosModules.servc--observability-ntfy
       self.nixosModules.systm--observability-maintenance-log
       self.nixosModules.systm--observability-backup
-      self.nixosModules.compat-options
     ];
 
     options.services.observability = {

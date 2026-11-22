@@ -99,44 +99,9 @@ The state root (`dataDir`, default `/data`, with `/data/<service>` below it) is 
 
 `self.lib.obsLib` (including `keyed`), `self.lib.{prometheusRendered,prometheusMaintenanceAlerts,lokiRendered,alloyRendered,grafanaDashboards,maintenanceLoggerScript}`, everything under `_internals/`, the test harness, the `compat` modules (`compat-options`, `compat-sops-options`; deprecated shims, removed in 0.4.0), and the development outputs (`packages.vm-smoke`, `packages.options-doc`, `packages.goldens`, `packages.fingerprint`, `checks.*`).
 
-## Deprecated names
+## Migrating from 0.2 or 0.3
 
-Deprecated in 0.3.0 and **removed in 0.4.0**. Old **option** names keep working and print a warning when used; old **module** names keep working without a warning (a flake output cannot warn). Migrate by replacing the left column with the right.
-
-### Module names
-
-| Old (0.2) | New |
-|---|---|
-| `servc--prometheus-nixlab` | `servc--observability-prometheus` |
-| `servc--alertmanager-nixlab` | `servc--observability-alertmanager` |
-| `servc--ntfy-nixlab` | `servc--observability-ntfy` |
-| `servc--loki-nixlab` | `servc--observability-loki` |
-| `servc--alloy-nixlab` | `servc--observability-alloy` |
-| `servc--grafana-nixlab` | `servc--observability-grafana` |
-| `systm--host-exporters-nixlab` | `systm--observability-host-exporters` |
-| `systm--maintenance-log-nixlab` | `systm--observability-maintenance-log` |
-| `systm--observability-backup-nixlab` | `systm--observability-backup` |
-| `nsops--alertmanager` | `nsops--observability-alertmanager` |
-| `nsops--grafana` | `nsops--observability-grafana` |
-
-`stack--observability` is unchanged.
-
-### Option namespaces
-
-Every option under an old namespace maps to the same option under the new one (for example `services.loki-nixlab.retention` is now `services.observability-loki.retention`).
-
-| Old (0.2) | New |
-|---|---|
-| `services.nixlab-observability` | `services.observability` |
-| `services.prometheus-nixlab` | `services.observability-prometheus` |
-| `services.alertmanager-nixlab` | `services.observability-alertmanager` |
-| `services.ntfy-nixlab` | `services.observability-ntfy` |
-| `services.loki-nixlab` | `services.observability-loki` |
-| `services.alloy-nixlab` | `services.observability-alloy` |
-| `services.grafana-nixlab` | `services.observability-grafana` |
-| `services.host-exporters-nixlab` | `services.observability-host-exporters` |
-| `services.maintenance-log-nixlab` | `services.observability-maintenance-log` |
-| `services.observability-backup-nixlab` | `services.observability-backup` |
+The `-nixlab` option and module names were removed in 0.4.0. Use the product-scoped names (`services.observability-<component>`, `servc--observability-<component>`, `systm--observability-<component>`, `nsops--observability-<component>`); every option kept its name below the namespace. The full old-to-new tables are in the 0.3.0 section of `CHANGELOG.md` and ADR-010.
 
 ## Changes in 0.3
 
