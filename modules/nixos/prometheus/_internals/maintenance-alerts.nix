@@ -1135,6 +1135,7 @@ in rec {
       rules = [
         {
           alert = "ZpoolDeviceErrors";
+          requires = "zfsMembers";
           expr = "zfs_vdev_errors > 0";
           for = "2m";
           labels = {
@@ -1149,6 +1150,7 @@ in rec {
         }
         {
           alert = "ZpoolDataErrors";
+          requires = "zfsMembers";
           expr = "zfs_pool_error_count > 0";
           for = "1m";
           labels = {
@@ -1163,6 +1165,7 @@ in rec {
         }
         {
           alert = "ZpoolScrubOverdue";
+          requires = "zfsMembers";
           expr = "time() - zfs_last_scrub_end_timestamp_seconds > 10 * 86400";
           for = "1h";
           labels = {
@@ -1177,6 +1180,7 @@ in rec {
         }
         {
           alert = "ZpoolScrubErrors";
+          requires = "zfsMembers";
           expr = "zfs_last_scrub_errors > 0";
           for = "5m";
           labels = {
@@ -1191,6 +1195,7 @@ in rec {
         }
         {
           alert = "ZpoolMemberMissing";
+          requires = "zfsMembers";
           expr = "zfs_expected_device_present == 0";
           for = "1m";
           labels = {
@@ -1205,6 +1210,7 @@ in rec {
         }
         {
           alert = "ZpoolMemberReonlined";
+          requires = "zfsMembers";
           expr = "time() - zfs_device_last_auto_online_timestamp_seconds < 3600 and zfs_device_last_auto_online_timestamp_seconds > 0";
           labels = {
             severity = "warning";

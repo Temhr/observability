@@ -190,6 +190,11 @@
         default = false;
         description = "Load PostgresReplicationLag. Requires a postgres exporter (pg_replication_lag_seconds).";
       };
+      zfsMembers = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Load the ZFS member and scrub alerts (ZpoolDeviceErrors, ZpoolDataErrors, ZpoolScrubOverdue, ZpoolScrubErrors, ZpoolMemberMissing, ZpoolMemberReonlined). Requires textfile metrics that node_exporter does not produce; see docs/operations/zfs-metrics.md.";
+      };
     };
 
     exporters = {

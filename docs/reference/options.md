@@ -6071,6 +6071,30 @@ false
 
 
 
+## services\.observability-prometheus\.maintenance\.alerts\.features\.zfsMembers
+
+
+
+Load the ZFS member and scrub alerts (ZpoolDeviceErrors, ZpoolDataErrors, ZpoolScrubOverdue, ZpoolScrubErrors, ZpoolMemberMissing, ZpoolMemberReonlined)\. Requires textfile metrics that node_exporter does not produce; see docs/operations/zfs-metrics\.md\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [\<nixpkgs/modules/nixos/prometheus/default\.nix, via option flake\.nixosModules\.servc--observability-prometheus>](https://github.com/NixOS/nixpkgs/blob//modules/nixos/prometheus/default.nix, via option flake.nixosModules.servc--observability-prometheus)
+
+
+
 ## services\.observability-prometheus\.maintenance\.expectedMounts
 
 
@@ -6567,8 +6591,6 @@ Port for Prometheus to listen on
 
 ## services\.observability-prometheus\.retention
 
-
-
 How long to retain metrics data
 
 
@@ -6598,6 +6620,8 @@ string
 
 
 ## services\.observability-prometheus\.retentionSize
+
+
 
 Cap on TSDB size (–storage\.tsdb\.retention\.size)\. Null means no size cap\. Useful on laptops\.
 

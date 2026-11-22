@@ -21,6 +21,7 @@
       dns = true;
       blackboxProbes = true;
       alertmanagerWired = true;
+      zfsMembers = true;
     };
 
     # Fake machines. Names become check names: prom-config-<name>, toplevel-<name>, ...
