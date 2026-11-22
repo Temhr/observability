@@ -2,7 +2,7 @@
 
 
 
-Whether to enable nixlab observability stack (Prometheus + Loki + Grafana + Alertmanager + ntfy)\.
+Whether to enable observability stack (Prometheus + Loki + Grafana + Alertmanager + ntfy)\.
 
 
 
@@ -1322,7 +1322,7 @@ null
 *Example:*
 
 ```nix
-"http://10.0.0.251:9093/"
+"http://192.0.2.10:9093/"
 ```
 
 *Declared by:*
@@ -2989,7 +2989,7 @@ null
 *Example:*
 
 ```nix
-"http://10.0.0.10:3101/"
+"http://192.0.2.10:3101/"
 ```
 
 *Declared by:*
@@ -5148,7 +5148,7 @@ null
 *Example:*
 
 ```nix
-"http://10.0.0.10:2586"
+"http://192.0.2.10:2586"
 ```
 
 *Declared by:*
@@ -5863,7 +5863,7 @@ null
 *Example:*
 
 ```nix
-"http://10.0.0.10:9090/"
+"http://192.0.2.10:9090/"
 ```
 
 *Declared by:*

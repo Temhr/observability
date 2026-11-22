@@ -172,7 +172,7 @@
     ];
 
     options.services.observability = {
-      enable = lib.mkEnableOption "nixlab observability stack (Prometheus + Loki + Grafana + Alertmanager + ntfy)";
+      enable = lib.mkEnableOption "observability stack (Prometheus + Loki + Grafana + Alertmanager + ntfy)";
 
       listenAddress = lib.mkOption {
         type = lib.types.nullOr lib.types.str;

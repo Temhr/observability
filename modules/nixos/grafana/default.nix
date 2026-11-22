@@ -124,7 +124,7 @@
       externalUrl = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
         default = null;
-        example = "http://10.0.0.10:3101/";
+        example = "http://192.0.2.10:3101/";
         description = "URL that links, redirects and notifications point to when no domain is set. Null keeps the previous fallback.";
       };
 
