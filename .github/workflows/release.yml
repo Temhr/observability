@@ -1,0 +1,27 @@
+name: release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9
+      - run: nix flake check
+      - name: Release notes
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          case "$v" in
+            *-rc*) echo "Release candidate $v. Not for production." > notes.md ;;
+            *) awk -v v="$v" '$0 ~ "^## " v "( |$)" {f=1; next} /^## / {f=0} f' CHANGELOG.md > notes.md
+               test -s notes.md || { echo "CHANGELOG.md has no section for $v"; exit 1; } ;;
+          esac
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          flag=""; case "$GITHUB_REF_NAME" in *-rc*) flag="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md $flag
