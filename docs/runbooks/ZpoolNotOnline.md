@@ -11,7 +11,7 @@
 
 **Fix.** Identify the non-ONLINE disk in `zpool status`.
 - Disk present again (`ls -l /dev/disk/by-id | grep <device>`) but ZFS still shows REMOVED/UNAVAIL: `sudo zpool online tanks <device>`. `zfs-member-reconcile` does this automatically within about 30 seconds.
-- Disk dead: `sudo zpool replace tanks <old-device> /dev/disk/by-id/<new-device>`, then update `zfsRaidz1Pool.devices` in `m720q-nas1.nix` so the member checks and the pool-rename fingerprint match the new disk.
+- Disk dead: `sudo zpool replace tanks <old-device> /dev/disk/by-id/<new-device>`, then update `zfsRaidz1Pool.devices` so the member checks and the pool-rename fingerprint match the new disk.
 - Disk OFFLINE on purpose: `sudo zpool online tanks <device>`.
 
 Wait for the resilver to finish (`zpool status`) before anything else that stresses the pool.

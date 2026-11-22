@@ -9,7 +9,7 @@
 2. `free -h` and `ps aux --sort=-%mem | head -15`
 3. `cat /proc/pressure/memory`
 
-**Fix.** Identify what was killed and what was using the memory. Limit the offender (`MemoryMax=` in its systemd unit), reduce what runs on the host, or add RAM or swap. On `nixnas1`, consider capping the ZFS ARC with `zfs_arc_max` if the ARC is crowding out services.
+**Fix.** Identify what was killed and what was using the memory. Limit the offender (`MemoryMax=` in its systemd unit), reduce what runs on the host, or add RAM or swap. On `<host>`, consider capping the ZFS ARC with `zfs_arc_max` if the ARC is crowding out services.
 
 **Escalate when.** It recurs, or the killed process is something critical (the observability stack, NFS, ZFS).
 

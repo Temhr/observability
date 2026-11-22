@@ -1,13 +1,13 @@
-{...}: {
-  flake.nixosModules.nsops--alertmanager = {
+{self, ...}: {
+  flake.nixosModules.nsops--observability-alertmanager = self.lib.obsLib.keyed "observability:sops-alertmanager" ({
     config,
     lib,
     ...
   }: let
-    cfg = config.services.alertmanager-nixlab;
+    cfg = config.services.observability-alertmanager;
   in {
     imports = [];
-    options.services.alertmanager-nixlab.secretsFile = lib.mkOption {
+    options.services.observability-alertmanager.secretsFile = lib.mkOption {
       type = lib.types.path;
       description = ''
         Path to the sops-encrypted alertmanager secrets file.
@@ -40,13 +40,13 @@
         format = "dotenv";
         restartUnits =
           ["alertmanager.service"]
-          ++ lib.optional (config.services.ntfy-nixlab.auth.enable or false) "ntfy-provision.service";
+          ++ lib.optional (config.services.observability-ntfy.auth.enable or false) "ntfy-provision.service";
       };
 
       # Wire the decrypted file path into the service module option so the
       # EnvironmentFiles= directive picks it up automatically.
-      services.alertmanager-nixlab.environmentFile =
+      services.observability-alertmanager.environmentFile =
         config.sops.secrets.ALERTMANAGER_ENV.path;
     };
-  };
+  });
 }

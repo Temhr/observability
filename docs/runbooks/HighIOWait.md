@@ -2,7 +2,7 @@
 
 **What it means.** The CPU has spent over 30% of its time waiting for I/O and at least one disk is busy more than 80% of the time, for 10 minutes. Storage is the bottleneck.
 
-**Likely causes.** A heavy read/write job; a ZFS scrub or resilver (common on `nixnas1`); a failing disk returning slow responses; swapping.
+**Likely causes.** A heavy read/write job; a ZFS scrub or resilver; a failing disk returning slow responses; swapping.
 
 **First three commands.**
 1. `iostat -x 5 3` (look for the busy device and high `await`)

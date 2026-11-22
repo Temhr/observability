@@ -2,6 +2,12 @@
 # Use from a module registered in this flake:  obsLib = self.lib.obsLib;
 {lib, ...}: {
   flake.lib.obsLib = {
+    # Give a module a stable identity so importing it twice is harmless.
+    keyed = key: module: {
+      inherit key;
+      imports = [module];
+    };
+
     # ---------------------------------------------------------------------------
     # mkNginxVirtualHost
     # Returns an attrset for services.nginx.virtualHosts.

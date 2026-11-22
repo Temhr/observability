@@ -11,7 +11,7 @@
 
 **Fix.**
 - Reseat the disk in its slot (dmesg shows the enclosure slot, for example `slot(7)`). If it reappears and spins up, `zfs-member-reconcile` runs `zpool online` for it within about 30 seconds and the alert resolves. `journalctl -t zfs-member-reconcile --since -1h` shows what it did.
-- The disk does not come back: it has failed. `sudo zpool replace tanks <old-device> /dev/disk/by-id/<new-device>`, then update `zfsRaidz1Pool.devices` in `m720q-nas1.nix` and rebuild. Otherwise this alert keeps firing for the old name, and the `zfs-pool-rename` device fingerprint stops matching on the next boot.
+- The disk does not come back: it has failed. `sudo zpool replace tanks <old-device> /dev/disk/by-id/<new-device>`, then update `zfsRaidz1Pool.devices` and rebuild. Otherwise this alert keeps firing for the old name, and the `zfs-pool-rename` device fingerprint stops matching on the next boot.
 - A replacement was already done and only the config is stale: update `devices` and rebuild.
 
 **Notes.** `zpool status` may still say ONLINE for a removed disk until I/O reaches it (a scrub or normal reads). Trust this alert over the pool state in that window.

@@ -1,6 +1,6 @@
 # SCSIDefectsGrowing
 
-**What it means.** A SAS/SCSI drive added entries to its grown defect list in the last 7 days: it has found bad sectors and remapped them. On `nixnas1` these are the disks in the ZFS pool.
+**What it means.** A SAS/SCSI drive added entries to its grown defect list in the last 7 days: it has found bad sectors and remapped them.
 
 **Likely causes.** Media wearing out or a failing head; occasionally vibration or power problems.
 

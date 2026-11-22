@@ -1,0 +1,1 @@
+{"failingAssertions":[],"firewallTcp":[80,443],"nginxEnabled":true,"vhosts":["alertmanager.example.test","grafana.example.test","loki.example.test","ntfy.example.test","prometheus.example.test"]}

@@ -21,6 +21,7 @@
       dns = true;
       blackboxProbes = true;
       alertmanagerWired = true;
+      zfsMembers = true;
     };
 
     # Fake machines. Names become check names: prom-config-<name>, toplevel-<name>, ...
@@ -37,15 +38,109 @@
       external = harness.mkTestHost {modules = [harness.fullStack harness.withoutSops];};
       # smallest possible: only `enable = true`
       minimal = harness.mkTestHost {modules = [harness.minimalStack];};
-      # An old-style setting must still reach its new home.
-      alias = harness.mkTestHost {
+      # >>> SPOT B: a new host entry goes here (after `minimal`, or after `alias`)
+      domain = harness.mkTestHost {
         modules = [
           harness.minimalStack
-          {services.loki-nixlab.alloyPort = 12999;}
+          {
+            # All five service modules declare `domain`. openFirewall = true makes the golden capture the 80/443 rules too.
+            services.observability.openFirewall = true;
+            services.observability-loki.domain = "loki.example.test";
+            services.observability-prometheus.domain = "prometheus.example.test";
+            services.observability-alertmanager.domain = "alertmanager.example.test";
+            services.observability-grafana.domain = "grafana.example.test";
+            services.observability-ntfy.domain = "ntfy.example.test";
+          }
         ];
       };
     };
+    # >>> SPOT A: a new `let` binding goes here (after `hosts = {…};`, before `in`)
+    domainEffects = let
+      c = hosts.domain.config;
+    in {
+      nginxEnabled = c.services.nginx.enable;
+      vhosts = builtins.attrNames c.services.nginx.virtualHosts;
+      firewallTcp = c.networking.firewall.allowedTCPPorts;
+      failingAssertions = map (a: a.message) (lib.filter (a: !a.assertion) c.assertions);
+    };
   in {
+    # >>> SPOT C: a new top-level attribute goes here (packages.* …), above `checks =`
+    packages.fingerprint = let
+      c = hosts.stable.config;
+      pick = names: set: lib.filterAttrs (n: _: builtins.elem n names) set;
+      unitNames = ["prometheus" "loki" "alloy" "grafana" "alertmanager" "ntfy" "prometheus-node-exporter" "loki-permissions" "grafana-permissions" "alloy-permissions" "ntfy-permissions" "prometheus-permissions" "loki-wal-recover" "prometheus-wal-recover" "ntfy-provision" "observability-backup" "maintenance-log-metrics"];
+      dump = name: value:
+        pkgs.writeText name (builtins.unsafeDiscardStringContext (builtins.toJSON value));
+    in
+      pkgs.linkFarm "fingerprint" [
+        {
+          name = "units.json";
+          path = dump "units.json" (lib.mapAttrs (_: s: {
+            inherit (s) serviceConfig;
+            after = s.after or [];
+            wants = s.wants or [];
+            requires = s.requires or [];
+            preStart = s.preStart or "";
+            script = s.script or "";
+          }) (pick unitNames c.systemd.services));
+        }
+        {
+          name = "users.json";
+          path = dump "users.json" (lib.mapAttrs (_: u: {inherit (u) uid group extraGroups;}) (pick ["loki" "prometheus" "grafana" "ntfy" "alloy"] c.users.users));
+        }
+        {
+          name = "firewall.json";
+          path = dump "firewall.json" {inherit (c.networking.firewall) allowedTCPPorts interfaces;};
+        }
+        {
+          name = "tmpfiles.json";
+          path = dump "tmpfiles.json" c.systemd.tmpfiles.rules;
+        }
+        {
+          name = "prometheus.json";
+          path = dump "prometheus.json" (self.lib.prometheusRendered {
+            config = c;
+            lib = pkgs.lib;
+          });
+        }
+        {
+          name = "alertmanager.json";
+          path = dump "alertmanager.json" c.services.prometheus.alertmanager.configuration;
+        }
+        {
+          name = "loki-ruler.json";
+          path = dump "loki-ruler.json" c.services.observability-loki.ruler.groups;
+        }
+        {
+          name = "datasources.json";
+          path = dump "datasources.json" c.services.observability-grafana.provisioning.datasources;
+        }
+        {
+          name = "loki.json";
+          path = dump "loki.json" (self.lib.lokiRendered {
+            config = c;
+            lib = pkgs.lib;
+          });
+        }
+        {
+          name = "alloy.alloy";
+          path = dump "alloy.alloy" (self.lib.alloyRendered {
+            config = c;
+            lib = pkgs.lib;
+          });
+        }
+        {
+          name = "sops.json";
+          path = dump "sops.json" (lib.mapAttrs (_: s: {inherit (s) owner restartUnits;}) c.sops.secrets);
+        }
+      ];
+
+    packages.goldens = pkgs.linkFarm "goldens" [
+      {
+        name = "domain-effects.json";
+        path = toJson "domain-effects.json" domainEffects;
+      }
+    ];
     checks = lib.optionalAttrs (system == "x86_64-linux") (
       # prom-config-<h>, prom-rules-<h>, alertmanager-config-<h> for each of these three
       (lib.foldl' (acc: name:
@@ -55,13 +150,94 @@
           hostConfig = hosts.${name}.config;
         }) {} ["stable" "unstable" "external"])
       // {
-        alias-alloyport = pkgs.runCommand "alias-alloyport" {} ''
-          test "${toString hosts.alias.config.services.alloy-nixlab.port}" = "12999"
+        # >>> SPOT D: a new check goes here, directly under this `// {` line
+        nvidia-gated = let
+          on = harness.mkTestHost {modules = [harness.minimalStack {services.observability.integrations.nvidia.enable = true;}];};
+          rules = h: builtins.toJSON h.config.services.observability-loki.ruler.groups;
+        in
+          assert !(lib.hasInfix "NvidiaXid" (rules hosts.minimal));
+          assert lib.hasInfix "NvidiaXid" (rules on);
+            pkgs.runCommand "nvidia-gated" {} "touch $out";
+
+        golden-domain-effects = pkgs.runCommand "golden-domain-effects" {nativeBuildInputs = [pkgs.jq pkgs.diffutils];} ''
+          jq -S . ${toJson "got.json" domainEffects} > got.json
+          jq -S . ${./_golden}/domain-effects.json > want.json
+          diff -u want.json got.json || { echo "side effects changed; if intended: nix build .#goldens -o /tmp/g && cp -L /tmp/g/*.json flake/ci/_golden/"; exit 1; }
           touch $out
         '';
 
+        loki-config = pkgs.runCommand "loki-config" {nativeBuildInputs = [pkgs.grafana-loki pkgs.remarshal];} ''
+          remarshal -i ${toJson "loki.json" (self.lib.lokiRendered {
+            config = hosts.stable.config;
+            lib = pkgs.lib;
+          })} -if json -of yaml -o loki.yml
+          loki -config.file=loki.yml -verify-config
+          touch $out
+        '';
+        alloy-config = pkgs.runCommand "alloy-config" {nativeBuildInputs = [pkgs.grafana-alloy];} ''
+          cp ${pkgs.writeText "config.alloy" (self.lib.alloyRendered {
+            config = hosts.stable.config;
+            lib = pkgs.lib;
+          })} config.alloy
+          alloy fmt config.alloy > /dev/null      # parses the file; non-zero exit on a syntax error
+          touch $out
+        '';
+
+        loki-runbook-coverage = pkgs.runCommand "loki-runbook-coverage" {nativeBuildInputs = [pkgs.jq];} ''
+          jq -r '[.. | objects | .alert? // empty] | unique[]' \
+            ${toJson "loki-groups.json" hosts.stable.config.services.observability-loki.ruler.groups} > alerts.txt
+          [ -s alerts.txt ] || { echo "found no Loki alerts: did the structure change?"; exit 1; }
+          missing=0
+          for a in $(cat alerts.txt); do
+            if [ ! -f ${self}/docs/runbooks/$a.md ] && ! grep -qx "$a" ${self}/docs/runbooks/_todo.txt; then
+              echo "no runbook for Loki alert $a"; missing=1
+            fi
+          done
+          [ $missing = 0 ]
+          touch $out
+        '';
+
+        port-defaults = let
+          s = hosts.minimal.config.services;
+          got = {
+            ntfy = s.observability-ntfy.port;
+            loki = s.observability-loki.port;
+            lokiGrpc = s.observability-loki.grpcPort;
+            grafana = s.observability-grafana.port;
+            prometheus = s.observability-prometheus.port;
+            blackbox = s.observability-prometheus.blackboxPort;
+            smartctl = s.observability-prometheus.smartctlPort;
+            systemdExporter = s.observability-prometheus.systemdExporterPort;
+            alertmanager = s.observability-alertmanager.port;
+            alertmanagerCluster = s.observability-alertmanager.clusterPort;
+            alloy = s.observability-alloy.port;
+          };
+          want = {
+            ntfy = 2586;
+            loki = 3100;
+            lokiGrpc = 9096;
+            grafana = 3101;
+            prometheus = 9090;
+            blackbox = 9115;
+            smartctl = 9633;
+            systemdExporter = 9558;
+            alertmanager = 9093;
+            alertmanagerCluster = 9094;
+            alloy = 12345;
+          };
+        in
+          pkgs.runCommand "port-defaults" {} ''
+            if [ '${builtins.toJSON got}' != '${builtins.toJSON want}' ]; then
+              echo "port defaults changed"
+              echo 'got:  ${builtins.toJSON got}'
+              echo 'want: ${builtins.toJSON want}'
+              exit 1
+            fi
+            touch $out
+          '';
+
         runbook-url-consistent = pkgs.runCommand "runbook-url-consistent" {} ''
-          test "${hosts.minimal.config.services.prometheus-nixlab.runbookBaseUrl}" = "${(prometheusMaintenanceAlerts {features = allFeatures;}).runbookBase or hosts.minimal.config.services.prometheus-nixlab.runbookBaseUrl}"
+          test "${hosts.minimal.config.services.observability-prometheus.runbookBaseUrl}" = "${(prometheusMaintenanceAlerts {features = allFeatures;}).runbookBase or hosts.minimal.config.services.observability-prometheus.runbookBaseUrl}"
           touch $out
         '';
 

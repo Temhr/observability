@@ -1,14 +1,14 @@
-{...}: {
-  flake.nixosModules.nsops--grafana = {
+{self, ...}: {
+  flake.nixosModules.nsops--observability-grafana = self.lib.obsLib.keyed "observability:sops-grafana" ({
     config,
     lib,
     ...
   }: let
-    cfg = config.services.grafana-nixlab;
+    cfg = config.services.observability-grafana;
   in {
     imports = [];
 
-    options.services.grafana-nixlab.secretsFile = lib.mkOption {
+    options.services.observability-grafana.secretsFile = lib.mkOption {
       type = lib.types.path;
       description = ''
         Path to the sops-encrypted grafana secrets file.
@@ -31,10 +31,10 @@
       };
 
       # Wire the decrypted files into the service module.
-      services.grafana-nixlab = {
+      services.observability-grafana = {
         credentialsFile = lib.mkDefault config.sops.secrets.GRAFANA_ADMIN_PASSWORD.path;
         secretKeyFile = lib.mkDefault config.sops.secrets.GRAFANA_SECRET_KEY.path;
       };
     };
-  };
+  });
 }

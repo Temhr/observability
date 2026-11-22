@@ -1,20 +1,20 @@
 {self, ...}: {
-  flake.nixosModules.stack--observability = {
+  flake.nixosModules.stack--observability = self.lib.obsLib.keyed "observability:stacks" ({
     config,
     lib,
     ...
   }: let
-    cfg = config.services.nixlab-observability;
+    cfg = config.services.observability;
     svc = config.services;
 
-    # Resolved ports. Single source of truth: ports.nix (mkDefault) or a plain
-    # assignment in a host file. The stack never owns port numbers.
+    # Resolved ports. Single source of truth: each service's option default, or a plain assignment in a host file.
+    # The stack never owns port numbers.
     port = {
-      grafana = svc.grafana-nixlab.port;
-      loki = svc.loki-nixlab.port;
-      prometheus = svc.prometheus-nixlab.port;
-      alertmanager = svc.alertmanager-nixlab.port;
-      ntfy = svc.ntfy-nixlab.port;
+      grafana = svc.observability-grafana.port;
+      loki = svc.observability-loki.port;
+      prometheus = svc.observability-prometheus.port;
+      alertmanager = svc.observability-alertmanager.port;
+      ntfy = svc.observability-ntfy.port;
     };
     scrapeJob = name: target: {
       job_name = name;
@@ -36,7 +36,7 @@
       local.file_match "maintenance" {
         path_targets = [{
           __address__ = "localhost",
-          __path__    = "${svc.maintenance-log-nixlab.logPath}",
+          __path__    = "${svc.observability-maintenance-log.logPath}",
         }]
       }
 
@@ -73,7 +73,7 @@
         // Constant labels
         stage.static_labels {
           values = {
-            job  = "maintenance-log",
+            job  = "${svc.observability-maintenance-log.lokiJob}",
             host = "${config.networking.hostName}",
           }
         }
@@ -103,7 +103,7 @@
     };
 
     # Tapping a notification opens Grafana (only when an external URL is resolved).
-    clickParams = lib.optional (svc.grafana-nixlab.externalUrl != null) "click=${lib.escapeURL svc.grafana-nixlab.externalUrl}";
+    clickParams = lib.optional (svc.observability-grafana.externalUrl != null) "click=${lib.escapeURL svc.observability-grafana.externalUrl}";
 
     # Alertmanager receiver that publishes to one ntfy topic.
     mkNtfyReceiverTo = topic: name: extraParams: let
@@ -160,24 +160,19 @@
     allTopics = [cfg.notifications.ntfyTopic] ++ map topicName (lib.attrNames cfg.notifications.topics);
   in {
     imports = [
-      self.nixosModules.servc--alertmanager-nixlab
-      self.nixosModules.servc--grafana-nixlab
-      self.nixosModules.servc--alloy-nixlab
-      self.nixosModules.servc--loki-nixlab
-      self.nixosModules.servc--prometheus-nixlab
-      self.nixosModules.servc--ntfy-nixlab
-      self.nixosModules.systm--maintenance-log-nixlab
-      self.nixosModules.systm--observability-backup-nixlab
-      # Remove in 0.3
-      (lib.mkRenamedOptionModule ["services" "loki-nixlab" "alloyPort"] ["services" "alloy-nixlab" "port"])
-      (lib.mkRenamedOptionModule ["services" "loki-nixlab" "alloyPackage"] ["services" "alloy-nixlab" "package"])
-      (lib.mkRenamedOptionModule ["services" "loki-nixlab" "enableAlloy"] ["services" "alloy-nixlab" "enable"])
-      (lib.mkRenamedOptionModule ["services" "loki-nixlab" "maintenance" "enable"] ["services" "maintenance-log-nixlab" "enable"])
-      (lib.mkRenamedOptionModule ["services" "loki-nixlab" "maintenance" "logPath"] ["services" "maintenance-log-nixlab" "logPath"])
+      self.nixosModules.servc--observability-alertmanager
+      self.nixosModules.servc--observability-grafana
+      self.nixosModules.servc--observability-alloy
+      self.nixosModules.servc--observability-loki
+      self.nixosModules.servc--observability-prometheus
+      self.nixosModules.servc--observability-ntfy
+      self.nixosModules.systm--observability-maintenance-log
+      self.nixosModules.systm--observability-backup
+      self.nixosModules.compat-options
     ];
 
-    options.services.nixlab-observability = {
-      enable = lib.mkEnableOption "nixlab observability stack (Prometheus + Loki + Grafana + Alertmanager + ntfy)";
+    options.services.observability = {
+      enable = lib.mkEnableOption "observability stack (Prometheus + Loki + Grafana + Alertmanager + ntfy)";
 
       listenAddress = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
@@ -310,7 +305,7 @@
             Wire alertmanager to send alerts to the local ntfy instance via a
             webhook receiver. Set to false to define your own alertmanager
             receivers (Slack, PagerDuty, etc.) instead — see
-            services.alertmanager-nixlab.receivers on the host config.
+            services.observability-alertmanager.receivers on the host config.
           '';
         };
 
@@ -327,8 +322,8 @@
         ntfyAuth.enable = lib.mkEnableOption "ntfy authentication with an Alertmanager writer and a reader account (needs NTFY_*_PASSWORD in the alertmanager secrets file)";
         ntfyAuth.environmentFile = lib.mkOption {
           type = lib.types.nullOr lib.types.path;
-          default = config.services.alertmanager-nixlab.environmentFile;
-          defaultText = lib.literalExpression "config.services.alertmanager-nixlab.environmentFile";
+          default = config.services.observability-alertmanager.environmentFile;
+          defaultText = lib.literalExpression "config.services.observability-alertmanager.environmentFile";
           description = ''
             File of KEY=VALUE lines read by ntfy-provision (NTFY_ALERTMANAGER_PASSWORD and friends).
             Defaults to the Alertmanager environment file; both need the same credentials.
@@ -387,6 +382,7 @@
         traefik = mkIntegration "127.0.0.1:8082" "traefik";
         cadvisor = mkIntegration "127.0.0.1:8080" "cAdvisor container metrics";
         postgres = mkIntegration "127.0.0.1:9187" "the PostgreSQL exporter";
+        nvidia.enable = lib.mkEnableOption "the NVIDIA Xid log alert (needs the NVIDIA kernel driver)";
       };
     };
 
@@ -394,26 +390,26 @@
       assertions = [
         {
           assertion = lib.all (n: builtins.match "[A-Za-z0-9_-]+" n != null) (lib.attrNames cfg.notifications.topics);
-          message = "services.nixlab-observability.notifications.topics: names may only contain letters, digits, '-' and '_'.";
+          message = "services.observability.notifications.topics: names may only contain letters, digits, '-' and '_'.";
         }
         {
           assertion = cfg.notifications.ntfyAuth.enable -> (cfg.notifications.ntfyAuth.environmentFile != null);
-          message = "services.nixlab-observability.notifications.ntfyAuth.enable needs notifications.ntfyAuth.environmentFile (it defaults to services.alertmanager-nixlab.environmentFile). Provide a file containing the NTFY_*_PASSWORD variables.";
+          message = "services.observability.notifications.ntfyAuth.enable needs notifications.ntfyAuth.environmentFile (it defaults to services.observability-alertmanager.environmentFile). Provide a file containing the NTFY_*_PASSWORD variables.";
         }
         {
           assertion = lib.all (i: i != "") cfg.access.interfaces;
-          message = "services.nixlab-observability.access.interfaces must not contain empty interface names. Remove interfaces this machine does not have (for example a missing Wi-Fi device) before passing the list.";
+          message = "services.observability.access.interfaces must not contain empty interface names. Remove interfaces this machine does not have (for example a missing Wi-Fi device) before passing the list.";
         }
       ];
 
       # Override contract (hosts/<name>.nix):
-      #   * Tunables set here are lib.mkDefault: override via services.nixlab-observability.*
+      #   * Tunables set here are lib.mkDefault: override via services.observability.*
       #     OR directly on services.<x>-nixlab.* — both work.
       #   * Wiring (datasources, scrape jobs, receivers, alertmanagerTargets) is plain and
       #     additive; extend it, don't replace it.
-      #   * Ports are never set here; see ports.nix / host plain assignment.
+      #   * Ports are never set here.
 
-      services.grafana-nixlab = {
+      services.observability-grafana = {
         enable = true;
         uid = lib.mkDefault 742;
         gid = lib.mkDefault 742;
@@ -422,7 +418,7 @@
         openFirewall = lib.mkDefault cfg.openFirewall;
       };
 
-      services.loki-nixlab = {
+      services.observability-loki = {
         enable = true;
         uid = lib.mkDefault 740;
         gid = lib.mkDefault 740;
@@ -430,9 +426,16 @@
         dataDir = lib.mkDefault "${cfg.dataDir}/loki";
         openFirewall = lib.mkDefault cfg.openFirewall;
         retention = lib.mkDefault cfg.loki.retention;
+        retentionStreams = [
+          {
+            selector = ''{job="${svc.observability-maintenance-log.lokiJob}"}'';
+            priority = 1;
+            period = "17520h";
+          }
+        ];
       };
 
-      services.prometheus-nixlab = {
+      services.observability-prometheus = {
         enable = true;
         uid = lib.mkDefault 743;
         gid = lib.mkDefault 743;
@@ -450,7 +453,7 @@
         };
       };
 
-      services.alertmanager-nixlab = {
+      services.observability-alertmanager = {
         enable = true;
         listenAddress = lib.mkDefault (bindAddress "alertmanager");
         openFirewall = lib.mkDefault cfg.openFirewall;
@@ -484,7 +487,7 @@
           };
       };
 
-      services.ntfy-nixlab = {
+      services.observability-ntfy = {
         enable = true;
         uid = lib.mkDefault 744;
         gid = lib.mkDefault 744;
@@ -495,13 +498,13 @@
       };
 
       # Links in notifications, redirects and the web UIs.
-      services.grafana-nixlab.externalUrl = lib.mkIf (cfg.publicHost != null) (lib.mkDefault "http://${cfg.publicHost}:${toString port.grafana}/");
-      services.alertmanager-nixlab.externalUrl = lib.mkIf (cfg.publicHost != null) (lib.mkDefault "http://${cfg.publicHost}:${toString port.alertmanager}/");
-      services.prometheus-nixlab.externalUrl = lib.mkIf (cfg.publicHost != null) (lib.mkDefault "http://${cfg.publicHost}:${toString port.prometheus}/");
-      services.ntfy-nixlab.externalUrl = lib.mkIf (cfg.publicHost != null) (lib.mkDefault "http://${cfg.publicHost}:${toString port.ntfy}");
-      services.grafana-nixlab.prometheusUrl = lib.mkDefault (
-        if svc.prometheus-nixlab.externalUrl != null
-        then svc.prometheus-nixlab.externalUrl
+      services.observability-grafana.externalUrl = lib.mkIf (cfg.publicHost != null) (lib.mkDefault "http://${cfg.publicHost}:${toString port.grafana}/");
+      services.observability-alertmanager.externalUrl = lib.mkIf (cfg.publicHost != null) (lib.mkDefault "http://${cfg.publicHost}:${toString port.alertmanager}/");
+      services.observability-prometheus.externalUrl = lib.mkIf (cfg.publicHost != null) (lib.mkDefault "http://${cfg.publicHost}:${toString port.prometheus}/");
+      services.observability-ntfy.externalUrl = lib.mkIf (cfg.publicHost != null) (lib.mkDefault "http://${cfg.publicHost}:${toString port.ntfy}");
+      services.observability-grafana.prometheusUrl = lib.mkDefault (
+        if svc.observability-prometheus.externalUrl != null
+        then svc.observability-prometheus.externalUrl
         else "http://localhost:${toString port.prometheus}"
       );
 
@@ -510,7 +513,7 @@
         allowedTCPPorts = map (name: port.${name}) cfg.access.expose;
       });
 
-      services.ntfy-nixlab.auth = lib.mkIf cfg.notifications.ntfyAuth.enable {
+      services.observability-ntfy.auth = lib.mkIf cfg.notifications.ntfyAuth.enable {
         enable = true;
         defaultAccess = "deny-all";
         environmentFile = cfg.notifications.ntfyAuth.environmentFile;
@@ -538,7 +541,7 @@
         ];
       };
 
-      services.prometheus-nixlab.maintenance.exporters.blackbox = {
+      services.observability-prometheus.maintenance.exporters.blackbox = {
         icmpTargets = lib.mkDefault (
           lib.optional (cfg.probes.gateway != null) cfg.probes.gateway
           ++ lib.filter (a: a != cfg.publicHost) cfg.probes.icmpTargets
@@ -546,37 +549,39 @@
         tcpTargets = lib.mkDefault cfg.probes.tcpTargets;
       };
 
-      services.loki-nixlab.ruler = {
+      services.observability-loki.ruler = {
         enable = lib.mkDefault true;
         alertmanagerUrl = "http://127.0.0.1:${toString port.alertmanager}";
         groups = [
           {
             name = "journal";
             interval = "1m";
-            rules = [
-              {
-                alert = "JournalOOMKill";
-                expr = ''sum by (host) (count_over_time({job="systemd-journal", transport="kernel"} |~ "(?i)out of memory: kill|oom-kill" [5m])) > 0'';
-                labels = {
-                  severity = "critical";
-                  category = "os";
-                  checklist_section = "II.5";
-                  instance = "{{ $labels.host }}";
-                };
-                annotations.summary = "OOM kill on {{ $labels.host }}";
-              }
-              {
-                alert = "KernelFilesystemError";
-                expr = ''sum by (host) (count_over_time({job="systemd-journal", transport="kernel"} |~ "EXT4-fs error|XFS.*(Corruption|I/O error)|BTRFS (error|critical)|Remounting filesystem read-only|I/O error, dev" [5m])) > 0'';
-                labels = {
-                  severity = "critical";
-                  category = "storage";
-                  checklist_section = "III.8";
-                  instance = "{{ $labels.host }}";
-                };
-                annotations.summary = "Kernel filesystem or I/O error on {{ $labels.host }}";
-              }
-              {
+            rules =
+              [
+                {
+                  alert = "JournalOOMKill";
+                  expr = ''sum by (host) (count_over_time({job="systemd-journal", transport="kernel"} |~ "(?i)out of memory: kill|oom-kill" [5m])) > 0'';
+                  labels = {
+                    severity = "critical";
+                    category = "os";
+                    checklist_section = "II.5";
+                    instance = "{{ $labels.host }}";
+                  };
+                  annotations.summary = "OOM kill on {{ $labels.host }}";
+                }
+                {
+                  alert = "KernelFilesystemError";
+                  expr = ''sum by (host) (count_over_time({job="systemd-journal", transport="kernel"} |~ "EXT4-fs error|XFS.*(Corruption|I/O error)|BTRFS (error|critical)|Remounting filesystem read-only|I/O error, dev" [5m])) > 0'';
+                  labels = {
+                    severity = "critical";
+                    category = "storage";
+                    checklist_section = "III.8";
+                    instance = "{{ $labels.host }}";
+                  };
+                  annotations.summary = "Kernel filesystem or I/O error on {{ $labels.host }}";
+                }
+              ]
+              ++ lib.optional cfg.integrations.nvidia.enable {
                 alert = "NvidiaXid";
                 expr = ''sum by (host) (count_over_time({job="systemd-journal", transport="kernel"} |= "NVRM: Xid" [5m])) > 0'';
                 labels = {
@@ -587,51 +592,53 @@
                 };
                 annotations.summary = "NVIDIA Xid fault on {{ $labels.host }}";
               }
-              {
-                alert = "SSHAuthFailureBurst";
-                expr = ''sum by (host) (count_over_time({job="systemd-journal", unit="sshd.service"} |~ "Failed password|Invalid user|authentication failure" [10m])) > 20'';
-                labels = {
-                  severity = "warning";
-                  category = "security";
-                  checklist_section = "IV.10";
-                  instance = "{{ $labels.host }}";
-                };
-                annotations.summary = "SSH authentication failure burst on {{ $labels.host }}";
-              }
-            ];
+              ++ [
+                {
+                  alert = "SSHAuthFailureBurst";
+                  expr = ''sum by (host) (count_over_time({job="systemd-journal", unit="sshd.service"} |~ "Failed password|Invalid user|authentication failure" [10m])) > 20'';
+                  labels = {
+                    severity = "warning";
+                    category = "security";
+                    checklist_section = "IV.10";
+                    instance = "{{ $labels.host }}";
+                  };
+                  annotations.summary = "SSH authentication failure burst on {{ $labels.host }}";
+                }
+              ];
           }
         ];
       };
 
-      # The helper follows Loki's maintenance settings so the file Alloy tails and the file the helper writes are the same.
-      services.maintenance-log-nixlab = {
+      # The helper follows loki.maintenance.enable; Alloy tails its logPath.
+      services.observability-maintenance-log = {
         enable = lib.mkDefault cfg.loki.maintenance.enable;
-        textfileDir = lib.mkIf cfg.prometheus.maintenance.enable "/var/lib/node_exporter";
+        textfileDir = lib.mkIf cfg.prometheus.maintenance.enable svc.observability-host-exporters.nodeExporter.textfileDir;
       };
 
-      services.alloy-nixlab = {
+      services.observability-alloy = {
         enable = lib.mkDefault true;
         lokiUrl = lib.mkDefault "http://127.0.0.1:${toString port.loki}/loki/api/v1/push";
         uid = lib.mkDefault 741;
         gid = lib.mkDefault 741;
-        extraConfig = lib.optionalString svc.maintenance-log-nixlab.enable maintenanceAlloyConfig;
+        extraConfig = lib.optionalString svc.observability-maintenance-log.enable maintenanceAlloyConfig;
       };
 
-      services.observability-backup-nixlab = {
+      services.observability-backup = {
         enable = lib.mkDefault true;
         dir = lib.mkDefault "${cfg.dataDir}/backup";
         sqliteFiles =
           ["${cfg.dataDir}/grafana/data/grafana.db"]
-          ++ lib.optional (svc.ntfy-nixlab.cacheFile != "") svc.ntfy-nixlab.cacheFile
-          ++ lib.optional svc.ntfy-nixlab.auth.enable "${svc.ntfy-nixlab.dataDir}/user.db";
+          ++ lib.optional (svc.observability-ntfy.cacheFile != "") svc.observability-ntfy.cacheFile
+          ++ lib.optional svc.observability-ntfy.auth.enable "${svc.observability-ntfy.dataDir}/user.db";
         plainFiles = [
-          "/var/lib/private/alertmanager"
-          svc.maintenance-log-nixlab.logPath
+          # Upstream Alertmanager runs with DynamicUser, so its real state lives under /var/lib/private/<StateDirectory>.
+          "/var/lib/private/${config.systemd.services.alertmanager.serviceConfig.StateDirectory or "alertmanager"}"
+          svc.observability-maintenance-log.logPath
         ];
       };
 
       # Grafana datasources (dashboards reference these uids).
-      services.grafana-nixlab.provisioning.datasources = [
+      services.observability-grafana.provisioning.datasources = [
         {
           name = "Prometheus";
           type = "prometheus";
@@ -658,31 +665,31 @@
       ];
 
       # Prometheus scrapes every service in the stack.
-      services.prometheus-nixlab.extraScrapeConfigs =
+      services.observability-prometheus.extraScrapeConfigs =
         [
           (scrapeJob "ntfy" (loopback port.ntfy))
           (scrapeJob "loki" (loopback port.loki))
           (scrapeJob "grafana" (loopback port.grafana))
           (scrapeJob "alertmanager" (loopback port.alertmanager))
         ]
-        ++ lib.optional svc.alloy-nixlab.enable
-        (scrapeJob "alloy" (loopback svc.alloy-nixlab.port))
+        ++ lib.optional svc.observability-alloy.enable
+        (scrapeJob "alloy" (loopback svc.observability-alloy.port))
         ++ lib.optional cfg.integrations.traefik.enable (scrapeJob "traefik" cfg.integrations.traefik.target)
         ++ lib.optional cfg.integrations.cadvisor.enable (scrapeJob "cadvisor" cfg.integrations.cadvisor.target)
         ++ lib.optional cfg.integrations.postgres.enable (scrapeJob "postgres" cfg.integrations.postgres.target);
 
-      services.prometheus-nixlab.maintenance.alerts.features = {
+      services.observability-prometheus.maintenance.alerts.features = {
         traefik = lib.mkDefault cfg.integrations.traefik.enable;
         containers = lib.mkDefault cfg.integrations.cadvisor.enable;
         postgres = lib.mkDefault cfg.integrations.postgres.enable;
       };
 
-      # Point Prometheus at Alertmanager. Neither servc--prometheus-nixlab nor
-      # servc--alertmanager-nixlab wire this automatically since they have no
+      # Point Prometheus at Alertmanager. Neither servc--observability-prometheus nor
+      # servc--observability-alertmanager wire this automatically since they have no
       # knowledge of each other — it has to happen at the aggregator level.
-      services.prometheus-nixlab.alertmanagerTargets = [
+      services.observability-prometheus.alertmanagerTargets = [
         "127.0.0.1:${toString port.alertmanager}"
       ];
     };
-  };
+  });
 }

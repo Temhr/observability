@@ -11,7 +11,7 @@
 
 **Fix.** Read the journal, correct the cause, then `sudo systemctl restart <name>` (or `sudo systemctl reset-failed <name>` once it is resolved or can be ignored).
 
-**Notes.** On `nixnas1`, a failing `zfs-member-reconcile` or `zfs-integrity-metrics` unit means the ZFS metrics have stopped updating, so the ZFS member and integrity alerts will not fire. Treat those as urgent. `zfs-pool-rename` can fail at boot if a pool disk is missing, because its device fingerprint no longer matches.
+**Notes.** A failing `zfs-member-reconcile` or `zfs-integrity-metrics` unit means the ZFS metrics have stopped updating, so the ZFS member and integrity alerts will not fire. Treat those as urgent. `zfs-pool-rename` can fail at boot if a pool disk is missing, because its device fingerprint no longer matches.
 
 **Escalate when.** The failed unit is boot-critical (`nfs-server`, `zfs-import-*`, `prometheus`, `alertmanager`) or many units fail at once.
 

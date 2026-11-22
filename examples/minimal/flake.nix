@@ -14,10 +14,10 @@
       modules = [
         observability.nixosModules.stack--observability
         {
-          services.nixlab-observability.enable = true;
-          services.alertmanager-nixlab.environmentFile = "/run/secrets/alertmanager.env";
-          services.grafana-nixlab.credentialsFile = "/run/secrets/grafana-admin";
-          services.grafana-nixlab.secretKeyFile = "/run/secrets/grafana-secret-key";
+          services.observability.enable = true;
+          services.observability-alertmanager.environmentFile = "/run/secrets/alertmanager.env";
+          services.observability-grafana.credentialsFile = "/run/secrets/grafana-admin";
+          services.observability-grafana.secretKeyFile = "/run/secrets/grafana-secret-key";
           # A real machine also needs hardware/boot configuration.
           system.stateVersion = "24.11";
           boot.loader.grub.enable = false;
