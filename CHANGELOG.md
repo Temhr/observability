@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0
+### Removed
+- All names deprecated in 0.3.0: the `-nixlab` option namespaces and module names (see ADR-010).
+
 ## 0.3.0
 ### Breaking
 - Removed the 0.2 aliases `loki-nixlab.{enableAlloy,alloyPort,alloyPackage}` and `loki-nixlab.maintenance.*`.

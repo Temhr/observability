@@ -24,7 +24,6 @@
         (inputs.import-tree ./modules)
         (inputs.import-tree ./sops)
         (inputs.import-tree ./stacks)
-        (inputs.import-tree ./compat)
       ];
     };
 }
