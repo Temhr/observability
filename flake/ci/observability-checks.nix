@@ -150,6 +150,14 @@
         }) {} ["stable" "unstable" "external"])
       // {
         # >>> SPOT D: a new check goes here, directly under this `// {` line
+        nvidia-gated = let
+          on = harness.mkTestHost {modules = [harness.minimalStack {services.observability.integrations.nvidia.enable = true;}];};
+          rules = h: builtins.toJSON h.config.services.observability-loki.ruler.groups;
+        in
+          assert !(lib.hasInfix "NvidiaXid" (rules hosts.minimal));
+          assert lib.hasInfix "NvidiaXid" (rules on);
+            pkgs.runCommand "nvidia-gated" {} "touch $out";
+
         golden-domain-effects = pkgs.runCommand "golden-domain-effects" {nativeBuildInputs = [pkgs.jq pkgs.diffutils];} ''
           jq -S . ${toJson "got.json" domainEffects} > got.json
           jq -S . ${./_golden}/domain-effects.json > want.json

@@ -174,6 +174,38 @@ string
 
 
 
+## services\.observability\.integrations\.nvidia\.enable
+
+
+
+Whether to enable the NVIDIA Xid log alert (needs the NVIDIA kernel driver)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [\<nixpkgs/stacks/observability\.nix, via option flake\.nixosModules\.stack--observability>](https://github.com/NixOS/nixpkgs/blob//stacks/observability.nix, via option flake.nixosModules.stack--observability)
+
+
+
 ## services\.observability\.integrations\.postgres\.enable
 
 
