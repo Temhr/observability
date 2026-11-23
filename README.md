@@ -179,7 +179,3 @@ Extending the stack (scrape targets, probes, dashboards, receivers, alerts): [`d
 ## Documentation
 
 [`docs/README.md`](docs/README.md) is the index. In short: [architecture and public API](docs/architecture/), [options reference](docs/reference/options.md), [operations](docs/operations/), [runbooks](docs/runbooks/), [development](docs/development/).
-
-## Licence
-
-TODO: add a `LICENSE` file and name the licence here.
