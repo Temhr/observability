@@ -1,9 +1,9 @@
-# Nixlab Observability Stack — Architecture & Reference
+# Observability Stack — Architecture & Reference
 
-> **Scope.** Everything under `modules/nixos/observability/`, `stacks/observability.nix`, `sops/{alertmanager,grafana}.nix`, `flake/lib/obs-lib.nix` (helpers the stack uses), `flake/ci/observability-checks.nix` + `flake/ci/_tests/`, `bin/mon-*.sh`, and `docs/runbooks/`.
-> **Basis.** Written from the code as provided on 2026-11-01.
-> **Companion docs.** `docs/runbooks/*.md` (one page per alert).
-> **Staleness rule.** If this file and the code disagree, the code wins. Section 16 lists open issues.
+> **Scope.** Everything this flake ships: `modules/nixos/<service>/`, `stacks/`, `sops/{alertmanager,grafana}.nix`, `flake/lib/obs-lib.nix` (the helpers the stack uses), `flake/ci/` (checks and the test harness), `bin/mon-*.sh`, `compat/` (deprecated names, removed in 0.4.0) and `docs/runbooks/`.
+> **Basis.** Written from the code as of **v0.3** (November 2026).
+> **Companion docs.** `docs/architecture/public-api.md` (what is stable), `docs/reference/options.md` (every option, generated), `docs/architecture/decisions/` (ADRs), `docs/operations/zfs-metrics.md`, and `docs/runbooks/*.md` (one page per alert).
+> **Staleness rule.** If this file and the code disagree, the code wins. Open questions and design decisions live in the ADRs and `CHANGELOG.md`.
 
 ---
 
@@ -33,25 +33,27 @@
 
 *Self-contained summary. If you only paste one section into a prompt, paste this one; paste the whole file for deep work.*
 
-**What it is.** A self-hosted observability stack in a NixOS flake (`nixlab`, flake-parts + import-tree, "Dendritic" self-registering modules). Components: **Prometheus** (metrics + alert rules), **Alertmanager** (routing/inhibition), **ntfy** (push notifications), **Loki** (logs + LogQL ruler), **Grafana Alloy** (log shipper), **Grafana** (dashboards), plus **node_exporter**, **smartctl_exporter**, **blackbox_exporter**, and a **maintenance-log** helper that records manual maintenance tasks as JSON lines.
+**What it is.** A self-hosted observability stack as a NixOS flake (flake-parts + import-tree, self-registering modules), extracted from the nixlab repository and independent of it. Components: **Prometheus** (metrics + alert rules), **Alertmanager** (routing/inhibition), **ntfy** (push notifications), **Loki** (logs + LogQL ruler), **Grafana Alloy** (log shipper), **Grafana** (dashboards), plus **node_exporter**, **smartctl_exporter**, **blackbox_exporter**, and a **maintenance-log** helper that records manual maintenance tasks as JSON lines.
 
-**Shape.** Each component is an *atomic* NixOS module (`servc--<x>-nixlab`, options at `services.<x>-nixlab.*`) with no knowledge of its siblings. All cross-service wiring (datasources, scrape jobs, receivers, ruler → Alertmanager, uids, URLs, firewall, backups) lives in **one aggregator module** `stack--observability` (`stacks/observability.nix`, options at `services.nixlab-observability.*`). A host enables `services.nixlab-observability.enable = true` and gets everything.
+**Shape.** Each component is an *atomic* NixOS module (`servc--observability-<x>`, options at `services.observability-<x>.*`) with no knowledge of its siblings. All cross-service wiring (datasources, scrape jobs, receivers, ruler → Alertmanager, uids, URLs, firewall, backups) lives in **one aggregator module** `stack--observability` (also exported as `default`; `stacks/observability.nix`, options at `services.observability.*`). A host enables `services.observability.enable = true` and gets everything. Supporting modules are `systm--observability-{host-exporters,maintenance-log,backup}`; optional sops-nix wiring is `nsops--observability-{alertmanager,grafana}`.
 
 **Defaults.** Stack defaults: scrape interval 30 s, Prometheus retention 15 d, Loki retention 744 h (maintenance log kept 2 years); `access.expose = [grafana ntfy prometheus]`, but `access.interfaces` is empty, so everything is loopback-only until interfaces are set.
 
 **Data flow.** exporters → Prometheus → (rules) → Alertmanager → webhook → ntfy topic `alerts` → phone/browser. Journald + `/var/log/*.log` + maintenance log → Alloy → Loki → (ruler alerts) → Alertmanager. Grafana reads Prometheus, Loki, Alertmanager (uids `prometheus`, `loki`, `alertmanager`).
 
-**Config generation pattern.** Nix attrset → `builtins.toJSON` → `remarshal` → YAML written into the service's `dataDir` (default `/data/<svc>`) at service start (`preStart`/`ExecStartPre`). Config is regenerated on every start; do not hand-edit generated files.
+**Config generation pattern.** Nix attrset → `builtins.toJSON` → `remarshal` → YAML written into the service's `dataDir` (default `/data/<svc>`) at service start (`preStart`/`ExecStartPre`). Config is regenerated on every start; do not hand-edit generated files. The Prometheus, Loki and Alloy configs are also exposed to CI (`flake.lib.{prometheusRendered,lokiRendered,alloyRendered}`) so they are validated at build time.
 
-**Ports.** ntfy 2586, Loki 3100 (gRPC 9096 loopback), Grafana 3101, Prometheus 9090, Alertmanager 9093, node 9100, smartctl 9633, blackbox 9115, systemd-exporter 9558 (off), Alloy 12345 (loopback).
+**Ports.** ntfy 2586, Loki 3100 (gRPC 9096 loopback), Grafana 3101, Prometheus 9090, Alertmanager 9093, node 9100, smartctl 9633, blackbox 9115, systemd-exporter 9558 (off), Alloy 12345 (loopback). They are the options' own defaults; a host's plain assignment wins.
 
-**Exposure model.** Everything binds loopback unless a service is listed in `access.expose` *and* `access.interfaces` is non-empty (then `0.0.0.0` + per-interface firewall rules on the named wired interfaces). `openFirewall` (all interfaces) defaults to false. Alertmanager always posts to the *local* ntfy.
+**Exposure model.** Everything binds loopback unless a service is listed in `access.expose` *and* `access.interfaces` is non-empty (then `0.0.0.0` + per-interface firewall rules on the named interfaces). `openFirewall` (all interfaces) defaults to false. Alertmanager always posts to the *local* ntfy. **Prometheus, Loki and Alertmanager have no authentication; Grafana has a login; ntfy is open unless `notifications.ntfyAuth.enable` is set.** Name only interfaces you trust.
 
-**Alerts.** ~62 Prometheus alert rules in `_internals/maintenance-alerts.nix`, grouped by maintenance-checklist section (labels `severity`, `category`, `checklist_section`), plus 4 Loki-ruler alerts defined in the stack. Core groups (stack self-health, recording rules) always load; the rest load only if `services.nixlab-observability.prometheus.maintenance.enable = true` (default `false`). Every Prometheus alert needs `docs/runbooks/<Alert>.md` or an entry in `docs/runbooks/_todo.txt` (CI-enforced). Deployed alerts carry a `condition` label (own expr + `for`) and a `runbook` annotation (URL built from `prometheus-nixlab.runbookBaseUrl`).
+**Alerts.** About 68 Prometheus alert rules in `_internals/maintenance-alerts.nix` (62 always-available plus six opt-in ZFS member and scrub alerts), grouped by maintenance-checklist section (labels `severity`, `category`, `checklist_section`), plus 4 Loki-ruler alerts defined in the stack (one of them, `NvidiaXid`, opt-in). Core groups (stack self-health, recording rules) always load; the rest load only if `services.observability.prometheus.maintenance.enable = true` (default `false`). Every alert, Prometheus or Loki, needs `docs/runbooks/<Alert>.md` or an entry in `docs/runbooks/_todo.txt` (CI-enforced). Deployed alerts carry a `condition` label (own expr + `for`) and a `runbook` annotation (URL built from `services.observability-prometheus.runbookBaseUrl`).
 
 **Resilience.** Prometheus can stay "healthy" while storing nothing (for example after a clock jump). Mitigations: services order after `time-sync.target` (which the host must make wait for NTP, e.g. via `systemd-time-wait-sync`); `prometheus-tsdb-guard` timer quarantines a wrong-time WAL/head; `mkWalSelfHeal` quarantines a corrupt WAL after crash loops (Prometheus and Loki); `absent_over_time` self-alert; inhibition of all `observability` alerts while `PrometheusNoRecentSamples` fires.
 
-**Verification.** `nix flake check` (promtool config/rules/tests, amtool, dashboard lint, shellcheck, runbook coverage); on a host `bin/mon-check.sh [--fire-test]`; `bin/mon-snapshot.sh <dir>` and `bin/mon-unitdiff.sh <old> <new>` for before/after comparisons.
+**Stability.** Pre-1.0. Module names, documented options, state paths, unit names and uids are a contract (`docs/architecture/public-api.md`). The 0.2 `-nixlab` option and module names are **deprecated aliases until 0.4.0** (`compat/`); everything in this file uses the new names. Every public module has a stable `key`, so modules can be imported alone, together, or through the stack.
+
+**Verification.** `nix flake check` (promtool config/rules/tests, amtool, Loki/Alloy config validation, dashboard lint, shellcheck, runbook coverage, contract tests, docs freshness); `nix build .#vm-smoke` boots a VM with the full stack (needs KVM); on a host `nix run .#mon-check [-- --fire-test]` (or `bin/mon-check.sh`); `mon-snapshot` and `mon-unitdiff` for before/after comparisons.
 
 ---
 
@@ -75,7 +77,7 @@
   (/metrics)                  │           └─────┬──────┘                                   └────────────┘            │
   textfile: maintenance.prom ─┘                 │ datasource                                                          │
   textfile: backup_metrics.prom                 ▼                                                                     │
-                              │          ┌───────────┐  datasources: Prometheus(uid prometheus, default),             │
+  textfile: zfs *.prom (opt.)  │          ┌───────────┐  datasources: Prometheus(uid prometheus, default),             │
                               │          │  Grafana  │  Loki(uid loki), Alertmanager(uid alertmanager)                │
                               │          │   :3101   │                                                                │
                               │          └───────────┘                                                                │
@@ -84,33 +86,35 @@
 
 ### 1.2 Components at a glance
 
-| Component | Module registered as | Options namespace | systemd unit(s) | Role |
+| Component | Module (`observability.nixosModules.<name>`) | Options namespace | systemd unit(s) | Role |
 |---|---|---|---|---|
-| Prometheus | `servc--prometheus-nixlab` | `services.prometheus-nixlab` | `prometheus`, `prometheus-permissions`, `prometheus-tsdb-guard` (+timer), `prometheus-wal-recover`, `backup-status-exporter` (opt.) | Scrapes, stores, evaluates alert + recording rules |
-| Host exporters | `systm--host-exporters-nixlab` | `services.host-exporters-nixlab` | `prometheus-node-exporter`, `prometheus-smartctl-exporter` | Machine metrics (node, SMART) |
-| Alertmanager | `servc--alertmanager-nixlab` (+ `nsops--alertmanager`) | `services.alertmanager-nixlab` | `alertmanager` (upstream module) | Group, route, inhibit, deliver |
-| ntfy | `servc--ntfy-nixlab` | `services.ntfy-nixlab` | `ntfy`, `ntfy-permissions`, `ntfy-provision` | Push notification server |
-| Loki | `servc--loki-nixlab` | `services.loki-nixlab` | `loki`, `loki-permissions`, `loki-wal-recover` | Log store + LogQL ruler |
-| Alloy | `servc--alloy-nixlab` | `services.alloy-nixlab` | `alloy`, `alloy-permissions` | Ships journal, `/var/log/*.log`, maintenance log to Loki |
-| Grafana | `servc--grafana-nixlab` (+ `nsops--grafana`) | `services.grafana-nixlab` | `grafana`, `grafana-permissions` | Dashboards; provisions datasources + dashboards |
-| Maintenance log | `systm--maintenance-log-nixlab` | `services.maintenance-log-nixlab` | `maintenance-log-metrics` (+timer) | `maintenance-log` CLI, JSONL file, completion metrics |
-| Observability backup | `systm--observability-backup-nixlab` | `services.observability-backup-nixlab` | `observability-backup` (+timer) | Nightly consistent copies of state |
-| **Aggregator** | `stack--observability` | `services.nixlab-observability` | — | Wires all of the above together |
+| Prometheus | `servc--observability-prometheus` | `services.observability-prometheus` | `prometheus`, `prometheus-permissions`, `prometheus-tsdb-guard` (+timer), `prometheus-wal-recover`, `backup-status-exporter` (opt.) | Scrapes, stores, evaluates alert + recording rules |
+| Host exporters | `systm--observability-host-exporters` | `services.observability-host-exporters` | `prometheus-node-exporter`, `prometheus-smartctl-exporter` | Machine metrics (node, SMART) |
+| Alertmanager | `servc--observability-alertmanager` (+ `nsops--observability-alertmanager`) | `services.observability-alertmanager` | `alertmanager` (upstream module) | Group, route, inhibit, deliver |
+| ntfy | `servc--observability-ntfy` | `services.observability-ntfy` | `ntfy`, `ntfy-permissions`, `ntfy-provision` | Push notification server |
+| Loki | `servc--observability-loki` | `services.observability-loki` | `loki`, `loki-permissions`, `loki-wal-recover` | Log store + LogQL ruler |
+| Alloy | `servc--observability-alloy` | `services.observability-alloy` | `alloy`, `alloy-permissions` | Ships journal, `/var/log/*.log`, maintenance log to Loki |
+| Grafana | `servc--observability-grafana` (+ `nsops--observability-grafana`) | `services.observability-grafana` | `grafana`, `grafana-permissions` | Dashboards; provisions datasources + dashboards |
+| Maintenance log | `systm--observability-maintenance-log` | `services.observability-maintenance-log` | `maintenance-log-metrics` (+timer) | `maintenance-log` CLI, JSONL file, completion metrics |
+| Backup | `systm--observability-backup` | `services.observability-backup` | `observability-backup` (+timer) | Nightly consistent copies of state |
+| **Aggregator** | `stack--observability` (also `default`) | `services.observability` | — | Wires all of the above together |
 
 ---
 
 ## 2. Design principles and why
 
-1. **Atomic modules, one aggregator.** Grafana must know Prometheus and Loki exist; Prometheus must know where Alertmanager is; Alertmanager must know ntfy. If any service module knew its siblings, none could be reused or tested alone. So each `servc--*` module only declares its own options and exposes *escape hatches* (`extraScrapeConfigs`, `alertmanagerTargets`, `provisioning.datasources`, `receivers`, `route.routes`, `ruler.groups`, `extraConfig`), and the stack fills them. See the repo README's `stacks/` rules.
-2. **Config as typed Nix, rendered at start.** Each service builds a Nix attrset, serialises to JSON, converts to YAML with `remarshal`, and installs it in `dataDir`. Reason: the data lives on a separate `/data` mount, configs must be inspectable on the host, and the same attrsets can be rendered and validated at *build time* in CI (`flake.lib.prometheusRendered`).
+1. **Atomic modules, one aggregator.** Grafana must know Prometheus and Loki exist; Prometheus must know where Alertmanager is; Alertmanager must know ntfy. If any service module knew its siblings, none could be reused or tested alone. So each `servc--*` module only declares its own options and exposes *escape hatches* (`extraScrapeConfigs`, `alertmanagerTargets`, `provisioning.datasources`, `receivers`, `route.routes`, `ruler.groups`, `retentionStreams`, `extraConfig`), and the stack fills them (ADR-005).
+2. **Config as typed Nix, rendered at start.** Each service builds a Nix attrset, serialises to JSON, converts to YAML with `remarshal`, and installs it in `dataDir`. Reason: the data lives on a separate `/data` mount, configs must be inspectable on the host, and the same attrsets can be rendered and validated at *build time* in CI (`flake.lib.prometheusRendered`, `lokiRendered`, `alloyRendered`).
 3. **Delegate where upstream is good, own the unit where it isn't.** Alertmanager, smartctl, blackbox and systemd exporters use the upstream NixOS modules (DynamicUser, amtool check, envsubst). Prometheus, Loki, Alloy, Grafana, ntfy and node_exporter are custom units so that paths, uids, hardening, ordering and self-healing are uniform.
-4. **Loopback by default; expose explicitly.** Some machines route over Wi-Fi, so exposure is by *named wired interface* (`access.interfaces`; policy in ADR-008/011) not by blanket `openFirewall`.
+4. **Loopback by default; expose explicitly.** Some machines route over Wi-Fi, so exposure is by *named interface* (`access.interfaces`; policy in ADR-008) not by blanket `openFirewall`.
 5. **Observability must survive its own failure modes.** Prometheus can stay healthy (`/-/healthy` OK) while rejecting every sample, for example after a clock jump; rules that depend on stored metrics can't catch that. `absent_over_time`, a time-sync ordering, a TSDB guard, WAL self-heal, and an inhibit rule exist for this.
 6. **Every alert is actionable and documented.** Alerts carry a checklist section, a runbook link and the exact condition that fired; CI refuses an alert with no runbook.
 7. **Manual maintenance is data.** The "maintenance checklist" (31 sections) is mirrored in `checklist.nix`; completed tasks are logged as JSONL, shipped to Loki (2-year retention) and turned into last-completed metrics for the dashboard.
 8. **Every host is self-contained.** No host scrapes, probes or ships logs to another by default; the same configuration runs everywhere and differences come from hardware and per-host overrides.
-9. **Reproducible, verifiable deploys.** Pinned uids, ordered units, CI checks, and `bin/mon-*` scripts that compare before/after state.
-10. **Precedence is explicit.** Stack tunables are `lib.mkDefault`: override with `services.nixlab-observability.*` *or* directly on `services.<x>-nixlab.*`. Wiring (datasources, scrape jobs, receivers, targets) is plain and additive: extend, don't replace.
+9. **Reproducible, verifiable deploys.** Pinned uids, ordered units, CI checks, a VM smoke test, and `mon-*` scripts that compare before/after state.
+10. **Precedence is explicit.** Stack tunables are `lib.mkDefault`: override with `services.observability.*` *or* directly on `services.observability-<x>.*`. Wiring (datasources, scrape jobs, receivers, targets) is plain and additive: extend, don't replace. Ports are option defaults; a host's plain assignment wins.
+11. **One owner per setting.** The module that owns a fact exposes it as an option and everyone else reads it (the textfile directory belongs to host-exporters, the maintenance-log label to the maintenance-log module, a port to its service). Names, state paths, unit names and uids are a published contract (`public-api.md`, ADR-010).
+12. **Nothing specific to one deployment.** Anything that only suits one fleet is an option that defaults off (the NVIDIA alert, the ZFS member alerts, the dashboard's timer list); the consumer's adapter switches it on.
 
 ---
 
@@ -118,20 +122,23 @@
 
 ```
 stacks/observability.nix                                  stack--observability (aggregator)
-modules/nixos/observability/
-├── alertmanager/default.nix                           servc--alertmanager-nixlab
-├── alloy/default.nix                                  servc--alloy-nixlab
-├── grafana/default.nix                                servc--grafana-nixlab, flake.lib.grafanaDashboards
+stacks/default.nix                                        exports it as `default`
+modules/nixos/
+├── alertmanager/default.nix                           servc--observability-alertmanager
+├── alloy/default.nix                                  servc--observability-alloy, flake.lib.alloyRendered
+├── alloy/_internals/rendered.nix                      the base Alloy pipeline text
+├── grafana/default.nix                                servc--observability-grafana, flake.lib.grafanaDashboards
 ├── grafana/dashboards/{system-overview-v5,zfs-monitoring}.json
-├── host-exporters/default.nix                         systm--host-exporters-nixlab
-├── loki/default.nix                                   servc--loki-nixlab
-├── maintenance-log/default.nix                        systm--maintenance-log-nixlab, flake.lib.maintenanceLoggerScript
+├── host-exporters/default.nix                         systm--observability-host-exporters
+├── loki/default.nix                                   servc--observability-loki, flake.lib.lokiRendered
+├── loki/_internals/rendered.nix                       the Loki config attrset
+├── maintenance-log/default.nix                        systm--observability-maintenance-log, flake.lib.maintenanceLoggerScript
 ├── maintenance-log/maintenance-logger.sh              the `maintenance-log` CLI
 ├── maintenance-log/_internals/checklist.nix           31 sections: code, name, hint
-├── observability-backup/default.nix                      systm--observability-backup-nixlab
-├── ntfy/default.nix                                   servc--ntfy-nixlab
+├── observability-backup/default.nix                   systm--observability-backup
+├── ntfy/default.nix                                   servc--observability-ntfy
 └── prometheus/
-    ├── default.nix                                    servc--prometheus-nixlab, flake.lib.prometheusRendered, flake.lib.prometheusMaintenanceAlerts
+    ├── default.nix                                    servc--observability-prometheus, flake.lib.prometheusRendered, flake.lib.prometheusMaintenanceAlerts
     └── _internals/
         ├── options.nix                                all options (incl. maintenance.*)
         ├── config.nix                                 users, dirs, services, tsdb-guard, bridge to host-exporters
@@ -141,39 +148,50 @@ modules/nixos/observability/
         ├── maintenance-alerts.nix                     all alert + recording rules, feature-gated
         ├── exporters/maintenance.nix                  blackbox, systemd exporter, backup-status exporter
         └── extras/nginx.nix                           optional nginx vhost
-sops/alertmanager.nix  (+ alertmanager.env)            nsops--alertmanager
-sops/grafana.nix       (+ grafana.yaml)                nsops--grafana
-flake/lib/obs-lib.nix                                  obsLib helpers (hardening, WAL self-heal, permissions…)
-flake/ci/observability-checks.nix                         build-time validation
-flake/ci/_tests/prometheus/rules.test.yml              promtool rule unit tests
-bin/mon-check.sh | mon-snapshot.sh | mon-unitdiff.sh   runtime verification
-docs/runbooks/<Alert>.md, _template.md, _todo.txt      per-alert runbooks
-docs/observability/observability.md
+sops/alertmanager.nix  (consumer supplies the file)    nsops--observability-alertmanager
+sops/grafana.nix       (consumer supplies the file)    nsops--observability-grafana
+flake/lib/obs-lib.nix                                  obsLib helpers (hardening, WAL self-heal, permissions, keyed…)
+flake/ci/
+├── observability-checks.nix                           build-time validation of rendered configs, rules, ports, runbooks
+├── contract-checks.nix                                module-key (double import) contract
+├── docs.nix                                           generated options reference + docs link check
+├── vm-smoke.nix                                       NixOS VM test (packages.vm-smoke)
+├── apps.nix                                           mon-check, mon-snapshot, mon-unitdiff (packages + apps)
+├── host-checks.nix                                    lib.observabilityHostChecks (for consumers' CI)
+├── _harness/default.nix                               fake machines used by the checks
+├── _tests/prometheus/rules.test.yml                   promtool rule unit tests
+└── _golden/domain-effects.json                        pinned side effects of setting `domain`
+compat/                                                DEPRECATED names (options, modules) and their checks; removed in 0.4.0
+bin/mon-check.sh | mon-snapshot.sh | mon-unitdiff.sh   runtime verification (sources of the packaged scripts)
+.github/workflows/{ci,release,update-flake-lock}.yml  CI, releases, weekly lock updates
+docs/                                                  README.md, architecture/ (public-api.md, decisions/), reference/options.md (generated),
+                                                       operations/ (e.g. zfs-metrics.md), runbooks/, development/ (migration guides)
+README.md  CHANGELOG.md
 ```
 
-**Underscore convention.** Paths containing a `_`-prefixed segment (`_internals/`, `_tests/`) are *not* auto-imported by import-tree. They are plain files imported by relative path from their owner (`default.nix`) or referenced by CI. That is why `maintenance-alerts.nix` is both `import`ed by `rendered.nix` and registered as `flake.lib.prometheusMaintenanceAlerts` by `prometheus/default.nix`.
+**Underscore convention.** Paths containing a `_`-prefixed segment (`_internals/`, `_tests/`, `_harness/`, `_golden/`) are *not* auto-imported by import-tree. They are plain files imported by relative path from their owner (`default.nix`) or referenced by CI. That is why `maintenance-alerts.nix` is both `import`ed by `rendered.nix` and registered as `flake.lib.prometheusMaintenanceAlerts` by `prometheus/default.nix`.
 
-**`flake.lib` registrations made from `modules/`** (consumed by name, never by path): for CI `grafanaDashboards` (the dashboards directory), `maintenanceLoggerScript`, `prometheusRendered` (function `{config, lib}` → `{rules, prometheusConfig}`), `prometheusMaintenanceAlerts` (function → `{groups, core, maintenance, allGroups}`).
+**`flake.lib` registrations** (consumed by name, never by path): for CI `grafanaDashboards` (the dashboards directory), `maintenanceLoggerScript`, `prometheusRendered` (function `{config, lib}` → `{rules, prometheusConfig}`), `lokiRendered` (function `{config, lib}` → the Loki config attrset), `alloyRendered` (function `{config, …}` → the full Alloy config text), `prometheusMaintenanceAlerts` (function → `{groups, core, maintenance, allGroups}`); for consumers `observabilityHostChecks`; internal `obsLib`.
 
 ---
 
 ## 5. The aggregator: `stack--observability`
 
-`stacks/observability.nix`. Imports the six service modules (`servc--{alloy,loki,prometheus,ntfy,alertmanager,grafana}-nixlab`) plus `systm--maintenance-log-nixlab` and `systm--observability-backup-nixlab` (Prometheus itself imports `systm--host-exporters-nixlab`). The `nsops--*` secrets modules are not imported (§9).
+`stacks/observability.nix`, exported as `stack--observability` and `default`. Imports the six service modules (`servc--observability-{alloy,loki,prometheus,ntfy,alertmanager,grafana}`) plus `systm--observability-maintenance-log` and `systm--observability-backup` (Prometheus itself imports `systm--observability-host-exporters`). The `nsops--observability-*` secrets modules are **not** imported (§9). While the deprecated names exist (until 0.4.0) it also imports `compat-options`, which maps the old option names onto the new ones.
 
-### 5.1 Options: `services.nixlab-observability`
+### 5.1 Options: `services.observability`
 
 | Option | Default | Meaning |
 |---|---|---|
 | `enable` | false | Turns on the whole stack |
 | `listenAddress` | null | Force one bind address for *all* services (overrides per-service logic; loopback scrape jobs then may not reach them) |
 | `publicHost` | `null` | Host/address used in UI links and notification links; builds each service's `externalUrl` when set |
-| `access.interfaces` | `[]` | Wired interfaces on which `access.expose` ports are opened (policy: ADR-008/011). Empty → loopback only |
+| `access.interfaces` | `[]` | Interfaces on which `access.expose` ports are opened (policy: ADR-008). Empty → loopback only. Names must be non-empty |
 | `access.expose` | `[grafana ntfy prometheus]` | Subset of `grafana ntfy alertmanager prometheus loki` |
 | `probes.gateway` | `null` | Gateway address to ICMP-probe |
 | `probes.icmpTargets` | `[]` | Addresses to ICMP-probe |
 | `probes.tcpTargets` | `[]` | TCP targets to probe |
-| `openFirewall` | false | Legacy: open each service port on all interfaces |
+| `openFirewall` | false | Legacy: open each service port on all interfaces (with `domain` set: ports 80/443) |
 | `dataDir` | `/data` | Root; each service uses `<dataDir>/<svc>` |
 | `loki.retention` / `loki.maintenance.enable` | `744h` / false | Log retention; maintenance logging (Alloy pipeline + helper) |
 | `prometheus.maintenance.enable` | **false** | **Loads all non-core alert groups, smartctl/blackbox exporters, textfile dir** |
@@ -186,7 +204,9 @@ docs/observability/observability.md
 | `notifications.formatMessages` | true | ntfy templating (needs ntfy ≥ 2.10) |
 | `notifications.ntfyAuth.enable` | false | ntfy auth, `alertmanager` (write-only) + `reader` (read-only) users; passwords come from `ntfyAuth.environmentFile` |
 | `notifications.separateCritical` | true | Critical alerts get their own receiver (priority 5) |
+| `notifications.topics.<name>` | none | Extra ntfy topics `<ntfyTopic>-<name>` with `matchers`, `priority`, `tags`, `alsoCatchAll` |
 | `integrations.{traefik,cadvisor,postgres}.{enable,target}` | off; `127.0.0.1:8082/8080/9187` | Extra scrape job + feature-flag the matching alert groups |
+| `integrations.nvidia.enable` | false | Load the `NvidiaXid` Loki-ruler alert (needs the NVIDIA kernel driver) |
 
 ### 5.2 Bind address and exposure logic
 
@@ -199,6 +219,8 @@ networking.firewall.interfaces.<iface>.allowedTCPPorts = [ port of each name ∈
 ```
 Ports 9094 (Alertmanager gossip) and Loki gRPC are never opened. Per-service `openFirewall` is set to `mkDefault cfg.openFirewall` (false), overriding each module's own default of `true`.
 
+> **Security note.** Prometheus, Loki and Alertmanager have **no authentication**. Grafana has a login. ntfy is open to anyone who can reach it unless `notifications.ntfyAuth.enable = true`. Putting a service in `access.expose` and an interface in `access.interfaces` makes it reachable by everything on that network, so name only interfaces you trust, or use a reverse proxy (`domain`, §6) with authentication in front. The flake does not know which interface is wireless and does not filter names (ADR-008).
+
 ### 5.3 What the stack wires (the cross-service contract)
 
 | Wiring | Where it lands |
@@ -207,18 +229,19 @@ Ports 9094 (Alertmanager gossip) and Loki gRPC are never opened. Per-service `op
 | `dataDir` = `<dataDir>/{grafana,loki,prometheus,ntfy}`; `listenAddress`; `openFirewall` | each module |
 | `externalUrl` = `http://<publicHost>:<port>/` (ntfy without trailing slash) | grafana, alertmanager, prometheus, ntfy |
 | Grafana `prometheusUrl` = Prometheus `externalUrl` or `http://localhost:9090` | dashboards' `prometheus_url` variable (browser-reachable link target) |
-| Grafana datasources `Prometheus` (uid `prometheus`, default), `Loki` (uid `loki`), `Alertmanager` (uid `alertmanager`, `implementation=prometheus`, `handleGrafanaManagedAlerts=false`), all at `127.0.0.1` | `services.grafana-nixlab.provisioning.datasources` |
-| Scrape jobs `ntfy`, `loki`, `grafana`, `alertmanager` (loopback), `alloy` (if enabled), plus traefik/cadvisor/postgres if enabled | `services.prometheus-nixlab.extraScrapeConfigs` |
+| Grafana datasources `Prometheus` (uid `prometheus`, default), `Loki` (uid `loki`), `Alertmanager` (uid `alertmanager`, `implementation=prometheus`, `handleGrafanaManagedAlerts=false`), all at `127.0.0.1` | `services.observability-grafana.provisioning.datasources` |
+| Scrape jobs `ntfy`, `loki`, `grafana`, `alertmanager` (loopback), `alloy` (if enabled), plus traefik/cadvisor/postgres if enabled | `services.observability-prometheus.extraScrapeConfigs` |
 | `alertmanagerTargets = [127.0.0.1:9093]` | Prometheus → Alertmanager |
-| Alert feature flags `traefik`, `containers`, `postgres` | `maintenance.alerts.features` |
+| Alert feature flags `traefik`, `containers`, `postgres` | `maintenance.alerts.features` (`zfsMembers` is left to the consumer) |
 | ICMP targets: `probes.gateway` + `probes.icmpTargets`; TCP targets: `probes.tcpTargets` | `maintenance.exporters.blackbox.{icmpTargets,tcpTargets}` |
 | Receivers `null`, `ntfy`, (`ntfy-critical`); default receiver `ntfy` | Alertmanager |
 | Route: `severity="critical"` → `ntfy-critical` (groupWait 10s, repeat 1h); everything else → `ntfy` | Alertmanager |
-| Loki ruler enabled, `alertmanagerUrl=http://127.0.0.1:9093`, rule group `journal` (4 alerts) | Loki |
-| Alloy `enable = mkDefault true`; `lokiUrl` local; maintenance pipeline appended to Alloy config when `loki.maintenance.enable` | Alloy |
-| `maintenance-log-nixlab.enable` follows `loki.maintenance.enable`; `textfileDir=/var/lib/node_exporter` when Prometheus maintenance is on | helper |
-| ntfy auth users + `ntfyAuth.environmentFile`; the restart wiring for a changed secret (`ntfy-provision`) lives in `nsops--alertmanager` | ntfy (when `ntfyAuth.enable`) |
-| Backup sources: sqlite `grafana.db`, ntfy `cache.db`, ntfy `user.db` (if auth); plain `/var/lib/private/alertmanager` and the maintenance log; target `<dataDir>/backup` | `observability-backup-nixlab` |
+| Loki ruler enabled, `alertmanagerUrl=http://127.0.0.1:9093`, rule group `journal` (3 alerts, plus `NvidiaXid` when `integrations.nvidia.enable`) | Loki |
+| Retention override `{job="<lokiJob>"}` kept 17520 h (2 years) | `services.observability-loki.retentionStreams` |
+| Alloy `enable = mkDefault true`; `lokiUrl` local; maintenance pipeline appended to Alloy config when `loki.maintenance.enable`, labelled `job=<lokiJob>` | Alloy |
+| `maintenance-log.enable` follows `loki.maintenance.enable`; its `textfileDir` is read from host-exporters' `nodeExporter.textfileDir` when Prometheus maintenance is on | helper |
+| ntfy auth users + `ntfyAuth.environmentFile`; the restart wiring for a changed secret (`ntfy-provision`) lives in `nsops--observability-alertmanager` | ntfy (when `ntfyAuth.enable`) |
+| Backup sources: sqlite `grafana.db`, ntfy `cache.db`, ntfy `user.db` (if auth); plain `/var/lib/private/<Alertmanager StateDirectory>` and the maintenance log; target `<dataDir>/backup` | `services.observability-backup` |
 
 ### 5.4 ntfy notification format
 
@@ -233,17 +256,17 @@ Alertmanager posts its webhook JSON to `http://127.0.0.1:2586/<topic>?...`. With
 
 ## 6. Component reference
 
-Conventions: **Unit** = systemd unit; **State** = on-disk state; **Hardening** = flags passed to `mkServiceHardening` (§11).
+Conventions: **Unit** = systemd unit; **State** = on-disk state; **Hardening** = flags passed to `mkServiceHardening` (§11). Module files are under `modules/nixos/<service>/`.
 
-### 6.1 Prometheus (`servc--prometheus-nixlab`)
+### 6.1 Prometheus (`servc--observability-prometheus`)
 
-**Files:** `default.nix` (entry: imports `systm--host-exporters-nixlab`; wraps config in `mkIf enable (mkMerge [config.nix, mkWalSelfHeal])`), `_internals/*`.
+**Files:** `prometheus/default.nix` (entry: imports `systm--observability-host-exporters`; wraps config in `mkIf enable (mkMerge [config.nix, mkWalSelfHeal])`), `prometheus/_internals/*`.
 
 **Unit `prometheus`** (`services/prometheus.nix`): custom unit, user/group `prometheus`, `after network.target prometheus-permissions.service time-sync.target`, `wants time-sync.target`. Hardening: `extraHardening`, `writablePaths=[dataDir]`. `Restart=on-failure`, `RestartSec=10s`, `ExecReload` = SIGHUP.
 `preStart` (runs as `prometheus`): renders `prometheus.yml` (mode 660) and `rules/alerts.yml` (mode 644) from JSON via `remarshal`, `mkdir data`.
 `ExecStart`: `--config.file=<dataDir>/prometheus.yml --storage.tsdb.path=<dataDir>/data --storage.tsdb.retention.time=<retention>[ --storage.tsdb.retention.size=…] --web.listen-address=<addr>:<port>[ --web.external-url=…]`.
 
-**Users:** `prometheus` (system user, `uid/gid` from options, extra group `disk` if smartctl is on) and every `mainUser`/`extraUsers` is added to group `prometheus` (read access to data).
+**Users:** `prometheus` (system user, `uid/gid` from options, extra group `disk` if smartctl is on) and every `extraUsers` entry is added to group `prometheus` (read access to data).
 
 **Rendered config** (`rendered.nix`, also used by CI):
 - `global`: `scrape_interval`, `evaluation_interval` (module defaults 15s; stack sets 30s), `external_labels = {monitor="prometheus", host=<hostname>}`. The `host` external label is attached to every alert sent to Alertmanager and is what notifications show.
@@ -263,39 +286,39 @@ Conventions: **Unit** = systemd unit; **State** = on-disk state; **Hardening** =
 | `blackbox-http` / `-icmp` / `-ssl` / `-dns` / `-tcp` / `-http-insecure` | per target list | maintenance + blackbox enabled + non-empty list | blackbox pattern: `__address__`→`__param_target`→`instance`, address rewritten to `localhost:9115`, modules `http_2xx`, `icmp`, `http_2xx` (ssl), `dns_a`, `tcp_connect`, `http_2xx_insecure` |
 | extras | — | from `extraScrapeConfigs` | stack: ntfy, loki, grafana, alertmanager, alloy, integrations |
 
-**Exporters** (`exporters/maintenance.nix`): upstream `services.prometheus.exporters.systemd` and `.blackbox` (listen `127.0.0.1` via `mkDefault`; blackbox modules file written to the store: `http_2xx`, `http_2xx_insecure`, `dns_a` using `dnsQueryName`, `icmp`, `tcp_connect`, all `preferred_ip_protocol: ip4`, 5s timeouts). Optional `backup-status-exporter` unit (loop every 300s reading a timestamp file and a size file and writing `/var/lib/node_exporter/backup_metrics.prom`: `backup_job_last_success_timestamp`, `backup_job_size_bytes`, label `job_name`). Off by default.
+**Exporters** (`exporters/maintenance.nix`): upstream `services.prometheus.exporters.systemd` and `.blackbox` (listen `127.0.0.1` via `mkDefault`; blackbox modules file written to the store: `http_2xx`, `http_2xx_insecure`, `dns_a` using `dnsQueryName`, `icmp`, `tcp_connect`, all `preferred_ip_protocol: ip4`, 5s timeouts). Optional `backup-status-exporter` unit (loop every 300s reading a timestamp file and a size file and writing `<textfileDir>/backup_metrics.prom`: `backup_job_last_success_timestamp`, `backup_job_size_bytes`, label `job_name`). Off by default.
 
-**Bridge to host-exporters:** `config.nix` sets `services.host-exporters-nixlab.{nodeExporter.enable, nodeExporter.textfileDir, smartctl.enable/port/devices}` from Prometheus options, using `mkDefault` so a host can override. Also creates `/var/lib/node_exporter` (0755 prometheus) when maintenance is on.
+**Bridge to host-exporters:** `config.nix` sets `services.observability-host-exporters.{nodeExporter.enable, nodeExporter.textfileDir, smartctl.enable/port/devices}` from Prometheus options. `nodeExporter.textfileDir` (`/var/lib/node_exporter`, set when maintenance is on) is the **single source** of the textfile directory: the tmpfiles rule, the backup-status exporter and the maintenance-log module read it rather than repeating the path. The other values use `mkDefault` so a host can override.
 
 **Other units** (`config.nix`): `prometheus-permissions` (§11), `prometheus-tsdb-guard` + timer (§12), and `prometheus-wal-recover` (via `mkWalSelfHeal`, `walDir=<dataDir>/data/wal`).
 
-**Options** (`services.prometheus-nixlab`): `enable`, `port` (9090), `listenAddress` (127.0.0.1), `domain`, `externalUrl`, `enableSSL`, `dataDir` (default `/var/lib/prometheus2`; stack: `/data/prometheus`), `retention` (15d), `retentionSize`, `scrapeInterval`, `evaluationInterval`, `slowScrapeInterval`, `package`, `openFirewall`, `blackboxPort`, `smartctlPort`, `systemdExporterPort`, `enableNodeExporter`, `uid`, `gid`, `extraScrapeConfigs`, `alertmanagerTargets`, `extraUsers`, `runbookBaseUrl`, and `maintenance.{enable, expectedMounts, alerts.features.{traefik,containers,postgres}, exporters.{systemd, blackbox.{enable,httpTargets,icmpTargets,sslTargets,dnsTargets,tcpTargets,httpInsecureTargets,dnsQueryName}, smartctl.{enable,devices}, backup.{enable,timestampFile,sizeFile,jobName}}}`.
+**Options** (`services.observability-prometheus`): `enable`, `port` (9090), `listenAddress` (127.0.0.1), `domain`, `externalUrl`, `enableSSL`, `dataDir` (default `/var/lib/prometheus2`; stack: `/data/prometheus`), `retention` (15d), `retentionSize`, `scrapeInterval`, `evaluationInterval`, `slowScrapeInterval`, `package`, `openFirewall`, `blackboxPort`, `smartctlPort`, `systemdExporterPort`, `enableNodeExporter`, `uid`, `gid`, `extraScrapeConfigs`, `alertmanagerTargets`, `extraUsers`, `runbookBaseUrl`, and `maintenance.{enable, expectedMounts, alerts.features.{traefik,containers,postgres,zfsMembers}, exporters.{systemd, blackbox.{enable,httpTargets,icmpTargets,sslTargets,dnsTargets,tcpTargets,httpInsecureTargets,dnsQueryName}, smartctl.{enable,devices}, backup.{enable,timestampFile,sizeFile,jobName}}}`.
 
-**Derived alert feature flags** (`rendered.nix`): `backup` = backup exporter enabled; `dns` = blackbox on and `dnsTargets != []`; `blackboxProbes` = blackbox on and any of http/icmp/ssl/tcp/http-insecure targets non-empty; `alertmanagerWired` = `alertmanagerTargets != []`; plus the three user flags.
+**Derived alert feature flags** (`rendered.nix`): `backup` = backup exporter enabled; `dns` = blackbox on and `dnsTargets != []`; `blackboxProbes` = blackbox on and any of http/icmp/ssl/tcp/http-insecure targets non-empty; `alertmanagerWired` = `alertmanagerTargets != []`; plus the user flags `traefik`, `containers`, `postgres`, `zfsMembers` (all default `false`).
 
-### 6.2 Host exporters (`systm--host-exporters-nixlab`)
+### 6.2 Host exporters (`systm--observability-host-exporters`)
 
-Node and smartctl exporters live in their own module so they can run without Prometheus.
+Node and smartctl exporters live in their own module so they can run without Prometheus. Options: `services.observability-host-exporters.{user, nodeExporter.{enable,port,listenAddress,textfileDir}, smartctl.{enable,port,listenAddress,devices}}` (there is no single top-level `enable`).
 
 - **Node exporter** (`prometheus-node-exporter`, custom unit, runs as `cfg.user`, default `prometheus`; the user/group are `mkDefault`ed here so Prometheus' own definition wins when it is enabled). Listen `localhost:9100` by default. Collectors enabled: `pressure`, `processes`, `systemd` (+ restart metrics; only `.service`/`.timer` units), `hwmon`, `netclass`, `netdev`, and `textfile` when `textfileDir` is set. Filesystem collector excludes mountpoints `/dev|/proc|/run|/sys` and fs types incl. `nfs`, `nfs4`, `overlay`, `squashfs`, `tmpfs`-like pseudo types (NFS client mounts are not checked). ZFS metrics (`node_zfs_*`, `node_zfs_zpool_state`) come from node_exporter's default zfs collector.
   Hardening: `extraHardening` but with `SystemCallFilter=""`, `ProtectClock=false` (the timex collector needs `adjtimex`; otherwise `ClockDrift` goes silent), `ProtectProc=default`, `ProcSubset=all`, `RestrictAddressFamilies` incl. `AF_NETLINK`, `MemoryMax=256M`, `TasksMax=128`.
 - **smartctl exporter**: upstream module on `127.0.0.1:9633`; the unit is given `CAP_SYS_RAWIO` (ambient + bounding), `DeviceAllow` for `/dev/sd*` and `/dev/nvme*` (read), `PrivateDevices=false`. `devices=[]` means scan.
 
-### 6.3 Alertmanager (`servc--alertmanager-nixlab`)
+### 6.3 Alertmanager (`servc--observability-alertmanager`)
 
 Delegates to upstream `services.prometheus.alertmanager` (DynamicUser, state under `/var/lib/private/alertmanager`, amtool config check, envsubst of `$VAR`). The module assembles `configuration` from typed options and deep-merges `extraConfig` over it (`recursiveUpdate`; lists such as `receivers` are replaced, not merged).
 
 - **Config shape:** `global.resolve_timeout` (5m) + optional SMTP/Slack/PagerDuty globals; root `route` (`receiver=defaultReceiver`, `group_by=[alertname instance]`, `group_wait 30s`, `group_interval 5m`, `repeat_interval 4h`) with child `routes`; `receivers`; `inhibit_rules`; `time_intervals`.
 - **Default inhibit rules:**
-  1. `severity=critical` suppresses `severity=warning` when `instance` and `category` are equal. (Consequence: a critical on one mountpoint suppresses warnings for other mountpoints on that host.)
+  1. `severity=critical` suppresses `severity=warning` when `instance` and `category` are equal. (Consequence: a critical on one mountpoint suppresses warnings for other mountpoints on that host; the suppressed alerts stay visible in Alertmanager as "inhibited".)
   2. `alertname=PrometheusNoRecentSamples` suppresses `category=observability` alerts (except itself) for the same `instance` — when Prometheus can't store samples, its other self-reports are unreliable.
-- **Secrets:** `environmentFile` (set by `nsops--alertmanager`) is passed to the upstream module; `$VAR` references in receivers are expanded at start. `checkConfig` defaults to `environmentFile == null` (build-time `amtool` can't see secrets); an assertion forbids env file + `checkConfig=true`.
+- **Secrets:** `environmentFile` (set by `nsops--observability-alertmanager`, or by you) is passed to the upstream module; `$VAR` references in receivers are expanded at start. `checkConfig` defaults to `environmentFile == null` (build-time `amtool` can't see secrets); an assertion forbids env file + `checkConfig=true`.
 - **Clustering:** with no `clusterPeers`, `--cluster.listen-address=` (empty) disables the gossip listener (previously `*:9094`). With peers, it listens on `clusterPort` and an assertion requires `openFirewall`.
 - **`webExternalUrl`:** `domain` → `externalUrl` → `http://<listen>:<port>/`. The upstream module appends the port to `listenAddress`; never include it.
 - **Assertions:** SSL needs domain; every route/default receiver name must exist in `receivers`; env-file/checkConfig; cluster peers need firewall.
-- **Options:** `enable, port, listenAddress, domain, externalUrl, enableSSL, package, openFirewall, checkConfig, environmentFile, clusterPeers, clusterPort, global.*, defaultReceiver, route.{groupBy,groupWait,groupInterval,repeatInterval,routes}, receivers, inhibitRules, timeIntervals, extraConfig`. Route submodule: `receiver, matchers, groupBy, groupWait, groupInterval, repeatInterval, continue, muteTimeIntervals`.
+- **Options:** `enable, port, listenAddress, domain, externalUrl, enableSSL, package, openFirewall, checkConfig, environmentFile, clusterPeers, clusterPort, global.*, defaultReceiver, route.{groupBy,groupWait,groupInterval,repeatInterval,routes}, receivers, inhibitRules, timeIntervals, extraConfig` (and `secretsFile` from the sops module). Route submodule: `receiver, matchers, groupBy, groupWait, groupInterval, repeatInterval, continue, muteTimeIntervals`.
 
-### 6.4 ntfy (`servc--ntfy-nixlab`)
+### 6.4 ntfy (`servc--observability-ntfy`)
 
 Custom unit `ntfy` (user/group `ntfy`, `extraHardening`). `preStart` renders `server.yml` (mode 640) from an attrset.
 
@@ -304,46 +327,49 @@ Custom unit `ntfy` (user/group `ntfy`, `extraHardening`). `preStart` renders `se
 - **Assertions:** SSL needs domain; `auth.users` needs `auth.enable` and an env file; SMTP needs a domain; attachments need `cacheFile`.
 - **Firebase** key via `Environment=NTFY_FIREBASE_KEY_FILE=…` (opt.).
 
-### 6.5 Loki (`servc--loki-nixlab`)
+### 6.5 Loki (`servc--observability-loki`)
 
-Custom unit `loki` (user/group `loki`, `extraHardening`, `TimeoutStopSec=5min` so WAL flush on stop isn't killed). Config rendered in `preStart` to `<dataDir>/loki.yaml`.
+Custom unit `loki` (user/group `loki`, `extraHardening`, `TimeoutStopSec=5min` so WAL flush on stop isn't killed). The config attrset lives in `loki/_internals/rendered.nix` (exposed to CI as `flake.lib.lokiRendered`) and is rendered in `preStart` to `<dataDir>/loki.yaml`.
 
 - **Generated config:** single-binary, `auth_enabled=false`, in-memory ring, replication 1; HTTP on `listenAddress:port`; **gRPC bound to `127.0.0.1:9096`**; filesystem chunk store; TSDB index schema `v13` from 2023-01-01 (period 24h); WAL enabled at `<dataDir>/wal`, `flush_on_shutdown`; compactor with retention enabled (delete delay 2h); 100 MB embedded results cache.
-- **Limits:** retention `retention` (default 744h = 31d); stream override **`{job="maintenance-log"}` kept 17520h (2 years)**, priority 1; ingestion 4 MB/s (burst 8), per-stream 3 MB/s (burst 10); `reject_old_samples` older than 168h; `max_entries_limit_per_query` 5000; `max_query_series` 10000.
+- **Limits:** retention `retention` (default 744h = 31d); per-stream overrides from the `retentionStreams` option (`selector`, `period`, `priority`), **empty by default**; the stack sets one for `{job="<lokiJob>"}` (the maintenance log) kept 17520h (2 years). Ingestion 4 MB/s (burst 8), per-stream 3 MB/s (burst 10); `reject_old_samples` older than 168h; `max_entries_limit_per_query` 5000; `max_query_series` 10000.
 - **Ruler** (opt.): local rule storage `<dataDir>/rules/fake/journal.yaml` (`fake` is the tenant name when auth is off), `alertmanager_url`, API enabled. Rule groups come from `ruler.groups` (set by the stack).
 - **Self-heal:** `mkWalSelfHeal` on `<dataDir>/wal`. `loki-permissions` oneshot re-chowns the data dir at boot.
-- **Removed options:** `enableAlloy`, `alloyPackage`, `alloyPort` and `maintenance.*` were removed from Loki in 0.2; the stack configures Alloy and the maintenance log itself. A `retentionStreams` option exists. Other options: `grpcPort`, `openGrpcFirewall` (default false; multi-instance only).
+- **Removed options:** `enableAlloy`, `alloyPackage`, `alloyPort` and `maintenance.*` were removed from Loki in 0.2 (no alias); the stack configures Alloy and the maintenance log itself. Other options: `grpcPort`, `openGrpcFirewall` (default false; multi-instance only).
+- **Validation:** the `loki-config` check renders the config for the `stable` test host and runs `loki -verify-config`.
 - **Assertions:** SSL needs domain; ruler needs `alertmanagerUrl`.
 
-### 6.6 Alloy (`servc--alloy-nixlab`)
+### 6.6 Alloy (`servc--observability-alloy`)
 
-Custom unit `alloy` (user/group `alloy`, member of `systemd-journal`; `allowJIT`, `extraHardening`, with `/proc` fully visible). Runs `alloy run --disable-reporting --server.http.listen-addr=127.0.0.1:<port> --storage.path=/var/lib/alloy/data /var/lib/alloy/config.alloy`. `preStart` installs the generated config.
+Custom unit `alloy` (user/group `alloy`, member of `systemd-journal`; `allowJIT`, `extraHardening`, with `/proc` fully visible). Runs `alloy run --disable-reporting --server.http.listen-addr=127.0.0.1:<port> --storage.path=/var/lib/alloy/data /var/lib/alloy/config.alloy`. `preStart` installs the generated config. The base pipeline text is in `alloy/_internals/rendered.nix`; `flake.lib.alloyRendered` returns base plus `extraConfig` for CI (`alloy-config` check: `alloy fmt`).
 
 - **Base pipelines** (host label = hostname):
   - `loki.write "local"` → `lokiUrl`.
   - Journal: `loki.source.journal "systemd"` (`max_age 12h`), relabel `__journal__systemd_unit`→`unit`, `__journal_priority_keyword`→`level`, `__journal__transport`→`transport`; processed with static labels `job=systemd-journal`, `host`, keeping only `job host unit level transport`.
   - Files: `/var/log/*.log` → `job=varlogs`, `host`.
-- **Appended `extraConfig`:** the stack adds the maintenance pipeline when `loki.maintenance.enable`: tail the maintenance log path, parse JSON, labels `section status user`, static `job=maintenance-log host=<hostname>`, timestamp from the entry's `timestamp` (RFC3339).
+- **Appended `extraConfig`:** the stack adds the maintenance pipeline when `loki.maintenance.enable`: tail the maintenance log path, parse JSON, labels `section status user`, static `job=<lokiJob>` (default `maintenance-log`) and `host=<hostname>`, timestamp from the entry's `timestamp` (RFC3339).
 - **Ordering:** after `network.target`, local `loki.service` (if `afterLocalLoki`, default true), `alloy-permissions.service`, `time-sync.target`.
 - `lokiUrl` can point at a Loki elsewhere; set `afterLocalLoki=false` if no Loki runs on the host.
+- `extraUsers` adds users to the `alloy` group.
 
-### 6.7 Grafana (`servc--grafana-nixlab`)
+### 6.7 Grafana (`servc--observability-grafana`)
 
 Custom unit `grafana` (user/group `grafana`, `extraHardening`, `UMask=0027`). Configured entirely by `GF_*` environment variables (paths under `<dataDir>`: `data`, `logs`, `plugins`, `provisioning`, `dashboards`; sqlite DB `data/grafana.db`; analytics, sign-up, Gravatar, news feed all off; anonymous access off unless `allowAnonymous`).
 
 - **Secrets:** `GF_SECURITY_ADMIN_PASSWORD__FILE` / `GF_SECURITY_SECRET_KEY__FILE` from `credentialsFile` / `secretKeyFile` (plain strings, never `path`, so nothing enters the store). A warning is emitted if `secretKeyFile` is null. The admin password applies only on first DB creation; afterwards use `grafana cli admin reset-admin-password`. Changing the secret key on an existing DB makes stored secrets unreadable.
 - **`ExecStartPre` step 1 (root, `+` prefix):** removes dashboard dirs and provisioning YAMLs that are no longer declared; backs up `grafana.db` once per day (`grafana.db.pre-cleanup-<date>`); deletes from the sqlite DB any *provisioned* dashboard that is no longer declared or whose uid no longer matches the JSON file (so renamed/re-uid'd dashboards re-provision cleanly), and empty folders; creates the provisioning/dashboard directories.
-- **Step 2 (grafana user):** writes `provisioning/datasources/datasources.yaml` (from `provisioning.datasources`, type lower-cased); for each dashboard, copies the JSON to `dashboards/<name>/dashboard.json` via `jq`, rewriting the `prometheus_url` template variable to `prometheusUrl`; writes a file-provider YAML (`folder`, `updateIntervalSeconds`, `allowUiUpdates`).
+- **Step 2 (grafana user):** writes `provisioning/datasources/datasources.yaml` (from `provisioning.datasources`, type lower-cased); for each dashboard, copies the JSON to `dashboards/<name>/dashboard.json` via `jq`, rewriting the `prometheus_url` template variable to `prometheusUrl` and the `timers_regex` variable to `timersRegex`; writes a file-provider YAML (`folder`, `updateIntervalSeconds`, `allowUiUpdates`).
 - **Dashboards:** `dashboards` (default: only `system-overview-v5` → `system-overview-v5.json`; a `maintenance` entry is commented out in the module and `maintenance-checklist.json` is not in the repo), plus `extraDashboards` (list of names resolving to `dashboards/<name>.json`, folder `maintenance`). Assertions: all named files exist; no name clashes with built-ins. After adding a JSON file, `git add` it.
+- **`timersRegex`** (default `nixos-upgrade.timer|nix-gc.timer`): regular expression of the systemd timers shown in the "Time since each timer last fired" panel. Set it to the timers you care about.
 
 | Dashboard | uid | Contents |
 |---|---|---|
-| `system-overview-v5.json` | `system-maintenance-overview-v5` | Health score, alerts by severity, failed units, hottest sensor, uptime, kernel, root FS, RAM, swap; firing/pending alert table with `condition` and Prometheus deep-link; firing by category/section; CPU, memory, pressure, disk, inode, IO, time-to-full, network, hwmon temperatures, CPU frequency, clock offset, failed units; service uptime; alert timeline; collapsed rows: **Observability Stack Health**, **Containers**, **Web & Network Probes**, **Backups & Certificates**, **Maintenance Checklists**; Extended metrics; Drive health (SMART, temperature, NVMe wear); Timers; Logs (Loki: journal errors by unit, failed SSH logins, kernel warnings); Maintenance (days since last completed, failed/skipped entries, recent entries) |
-| `zfs-monitoring.json` (opt-in: `extraDashboards=["zfs-monitoring"]`) | `zfs-pool-monitoring` | Pool state, dataset I/O, ARC, ZIL, dataset space; `$zpool` variable |
+| `system-overview-v5.json` | `system-maintenance-overview-v5` | Health score, alerts by severity, failed units, hottest sensor, uptime, kernel, root FS, RAM, swap; firing/pending alert table with `condition` and Prometheus deep-link; firing by category/section; CPU, memory, pressure, disk, inode, IO, time-to-full, network, hwmon temperatures, CPU frequency, clock offset, failed units; service uptime; alert timeline; collapsed rows: **Observability Stack Health**, **Containers**, **Web & Network Probes**, **Backups & Certificates**, **Maintenance Checklists**; Extended metrics; Drive health (SMART, temperature, NVMe wear); Timers (filtered by `timersRegex`); Logs (Loki: journal errors by unit, failed SSH logins, kernel warnings); Maintenance (days since last completed, failed/skipped entries, recent entries; these two Loki panels query the default `job="maintenance-log"` label) |
+| `zfs-monitoring.json` (opt-in: `extraDashboards=["zfs-monitoring"]`) | `zfs-pool-monitoring` | Pool state, member disks and integrity, dataset I/O, ARC, ZIL, dataset space; `$zpool` variable. Its member-disk and scrub panels need the textfile metrics in `docs/operations/zfs-metrics.md` |
 
 Dashboards use the hidden datasource variable `DS_PROMETHEUS` (resolves to the default Prometheus datasource) and the fixed Loki uid `loki`. Dashboard-only metrics that need other exporters (containers, traefik, backups) show "no … metrics" placeholders until enabled.
 
-### 6.8 Maintenance log (`systm--maintenance-log-nixlab`)
+### 6.8 Maintenance log (`systm--observability-maintenance-log`)
 
 - **Checklist** (`_internals/checklist.nix`): 31 entries `{code, name, hint}` — I.1–I.3 hardware, II.4–II.6 OS, III.7–III.9 storage/backup, IV.10–IV.13 network/security, V.14–V.17 services, VI.18–VI.20 containers/VMs, VII.21–VII.23 observability itself, VIII.24–VIII.26 config/docs, IX.27–IX.28 redundancy/DR, X.29–X.31 weekly/monthly/quarterly. There is no cadence or overdue tracking. This list is also the source of truth for the `checklist_section` labels used on alerts.
 - **CLI** `maintenance-log` (wrapper over `maintenance-logger.sh`, with `jq coreutils gawk gnugrep` on PATH, `MAINTENANCE_LOG`, `MAINTENANCE_CHECKLIST` set). Interactive menu or flags:
@@ -353,11 +379,12 @@ Dashboards use the hidden datasource variable `DS_PROMETHEUS` (resolves to the d
   ```
   `QUICK` is a valid free-form section. Entries are JSON lines `{timestamp(UTC), level, section, task, status, notes, hostname, user}`; under `sudo`, `user` is the invoking user.
 - **File:** `/var/log/maintenance.jsonl` (never `.log`), mode 0664 `root:wheel` (wheel-writable only, to prevent forged audit entries), logrotate monthly, 24 kept, `copytruncate`.
+- **Options:** `enable`, `logPath`, `textfileDir`, and `lokiJob` (default `maintenance-log`): the Loki `job` label of this log, which the stack uses for both Alloy's label and Loki's retention stream.
 - **Metrics** (only if `textfileDir` set): timer every 5 min (+1 min after boot) runs `maintenance-log-metrics`, which reads the current file and `.1`, finds the latest `completed` timestamp per section, and writes `<textfileDir>/maintenance.prom` with `maintenance_last_completed_timestamp_seconds{section}` for **every** section (0 = never). The dashboard panel *Days since last completed, by section* uses it; there is no alert.
 
-### 6.9 Observability backup (`systm--observability-backup-nixlab`)
+### 6.9 Backup (`systm--observability-backup`)
 
-Daily at 03:15 (+≤15 min, `Persistent`), `observability-backup` oneshot (root, `UMask 0077`): for each SQLite file, `sqlite3 <f> ".backup '<dir>/<basename>.bak'"` (consistent online copy); for each plain path, `cp -a` into `<dir>`. The stack points `dir` at `<dataDir>/backup`; **that directory must be included in your normal off-host backup** (`backup-home` sources). Prometheus TSDB and Loki chunks are *not* backed up.
+Daily at 03:15 (+≤15 min, `Persistent`), `observability-backup` oneshot (root, `UMask 0077`): for each SQLite file, `sqlite3 <f> ".backup '<dir>/<basename>.bak'"` (consistent online copy); for each plain path, `cp -a` into `<dir>`. The stack points `dir` at `<dataDir>/backup`; **that directory must be included in your normal off-host backup**. Prometheus TSDB and Loki chunks are *not* backed up.
 
 ---
 
