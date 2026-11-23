@@ -62,26 +62,26 @@
 ### 1.1 Component diagram
 
 ```
-                              ┌──────────────────────────── one host running the full stack ───────────────────────────┐
-                              │                                                                                        │
-  /var/log/*.log ─┐           │                                  ┌───────────────┐                                    │
-  journald ───────┼─► Alloy ──┼──── push :3100 ───────────────►  │     Loki      │ ◄──── LogQL ───┐                   │
-  maintenance     │ (lo:12345)│                                  │ (+ ruler)     │                │                   │
-  .jsonl ─────────┘           │                                  └──────┬────────┘                │                   │
-                              │                                         │ ruler alerts            │                   │
-  node_exporter :9100 ─┐      │                                         ▼                         │                   │
-  smartctl      :9633 ─┤      │                                  ┌───────────────┐          ┌─────┴──────┐            │
-  blackbox      :9115 ─┼──────┼─ scrape ► ┌────────────┐ alerts► │ Alertmanager  │ webhook► │    ntfy    │ ► phone    │
-  ntfy/loki/grafana/  ─┤      │           │ Prometheus │ ──────► │   :9093       │ :2586    │  topic     │            │
-  alertmanager/alloy  ─┘      │           │   :9090    │         └───────────────┘ /alerts  │  "alerts"  │            │
-  (/metrics)                  │           └─────┬──────┘                                   └────────────┘            │
-  textfile: maintenance.prom ─┘                 │ datasource                                                          │
-  textfile: backup_metrics.prom                 ▼                                                                     │
-  textfile: zfs *.prom (opt.) │          ┌───────────┐  datasources: Prometheus(uid prometheus, default),             │
-                              │          │  Grafana  │  Loki(uid loki), Alertmanager(uid alertmanager)                │
-                              │          │   :3101   │                                                                │
-                              │          └───────────┘                                                                │
-                              └────────────────────────────────────────────────────────────────────────────────────────┘
+                              ┌──────────────────────────── one host running the full stack ───────────────────────┐
+                              │                                                                                    │
+  /var/log/*.log ─┐           │                                  ┌───────────────┐                                 │
+  journald ───────┼─► Alloy ──┼──── push :3100 ───────────────►  │     Loki      │ ◄──── LogQL ───┐                │
+  maintenance     │ (lo:12345)│                                  │ (+ ruler)     │                │                │
+  .jsonl ─────────┘           │                                  └──────┬────────┘                │                │
+                              │                                         │ ruler alerts            │                │
+  node_exporter :9100 ─┐      │                                         ▼                         │                │
+  smartctl      :9633 ─┤      │                                  ┌───────────────┐          ┌─────┴──────┐         │
+  blackbox      :9115 ─┼──────┼─ scrape ► ┌────────────┐ alerts► │ Alertmanager  │ webhook► │    ntfy    │ ► phone │
+  ntfy/loki/grafana/  ─┤      │           │ Prometheus │ ──────► │   :9093       │ :2586    │  topic     │         │
+  alertmanager/alloy  ─┘      │           │   :9090    │         └───────────────┘ /alerts  │  "alerts"  │         │
+  (/metrics)                  │           └─────┬──────┘                                    └────────────┘         │
+  textfile: maintenance.prom ─┘                 │ datasource                                                       │
+  textfile: backup_metrics.prom                 ▼                                                                  │
+  textfile: zfs *.prom (opt.) │          ┌───────────┐  datasources: Prometheus(uid prometheus, default),          │
+                              │          │  Grafana  │  Loki(uid loki), Alertmanager(uid alertmanager)             │
+                              │          │   :3101   │                                                             │
+                              │          └───────────┘                                                             │
+                              └────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 1.2 Components at a glance
