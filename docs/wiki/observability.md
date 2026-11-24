@@ -689,24 +689,34 @@ nix run github:Temhr/observability/<tag>#mon-unitdiff -- <old-system> <new-syste
 
 ## 15. Extending the stack
 
+**Contribution rules.** Write the test first (a failing check, then the change). New files must be `git add`ed before `nix` can see them. Run `nix fmt -- .` and `nix flake check` before you push. Anything specific to one deployment (host names, addresses, hardware only you have) belongs in the consumer's adapter, not here; if it must exist in this flake, make it an option that defaults off.
+
 **Add an alert (Prometheus).**
-1. Add the rule to the right group in `_internals/maintenance-alerts.nix` (`alert`, `expr`, `for`, `labels.{severity,category,checklist_section}`, `annotations.{summary,description}`; `requires = "<flag>"` if it depends on an optional exporter — define the flag in `rendered.nix`/`options.nix` if new).
-2. Write `docs/runbooks/<Alert>.md` from `_template.md` (or add the name to `_todo.txt`).
-3. Add a test case to `flake/ci/_tests/prometheus/rules.test.yml`.
-4. `git add -A && nix flake check`.
+1. Add the rule to the right group in `modules/nixos/prometheus/_internals/maintenance-alerts.nix` (`alert`, `expr`, `for`, `labels.{severity,category,checklist_section}`, `annotations.{summary,description}`).
+2. If it depends on an optional exporter or metric, gate it: add `requires = "<flag>";` directly under the `alert = …;` line, add the flag as a boolean option (default `false`) under `maintenance.alerts.features` in `prometheus/_internals/options.nix`, and add `<flag> = true;` to the `allFeatures` binding in `flake/ci/observability-checks.nix` so the all-features, runbook and rule-test checks still see it. (`zfsMembers` is the worked example; `rendered.nix` passes the options through as features automatically.)
+3. Write `docs/runbooks/<Alert>.md` from `_template.md` (or add the name to `_todo.txt`).
+4. Add a test case to `flake/ci/_tests/prometheus/rules.test.yml`.
+5. `git add -A && nix fmt -- . && nix flake check`.
 
-**Add a log alert.** Append a rule to the `journal` group in `stacks/observability.nix` (`services.loki-nixlab.ruler.groups`); set `instance = "{{ $labels.host }}"` plus `severity`, `category`, `checklist_section`. No test/runbook-coverage applies; write a runbook anyway.
+**Add a log alert.** Append a rule to the `journal` group in `stacks/observability.nix` (`services.observability-loki.ruler.groups`); set `instance = "{{ $labels.host }}"` plus `severity`, `category`, `checklist_section`. To make it opt-in, put the rule behind `lib.optional cfg.integrations.<name>.enable` in the `rules` list (keep the order of the other rules) and add the option beside `integrations.nvidia.enable`. Write the runbook: `loki-runbook-coverage` fails without it.
 
-**Add a scrape target.** Host-specific: `services.prometheus-nixlab.extraScrapeConfigs = [{ job_name = "x"; static_configs = [{ targets = ["127.0.0.1:1234"]; }]; }];`. Fleet-wide: add a `scrapeJob` to the stack, or an `integrations.*` entry plus an alert feature flag.
+**Add a scrape target.** Host-specific: `services.observability-prometheus.extraScrapeConfigs = [{ job_name = "x"; static_configs = [{ targets = ["127.0.0.1:1234"]; }]; }];`. Fleet-wide: add a `scrapeJob` to the stack, or an `integrations.*` entry plus an alert feature flag.
 
-**Add a probe.** Set `services.prometheus-nixlab.maintenance.exporters.blackbox.{httpTargets,sslTargets,dnsTargets,tcpTargets,icmpTargets,httpInsecureTargets}` (requires `maintenance.enable`).
+**Add a probe.** Set `services.observability-prometheus.maintenance.exporters.blackbox.{httpTargets,sslTargets,dnsTargets,tcpTargets,icmpTargets,httpInsecureTargets}` (requires `maintenance.enable`). The stack fills `icmpTargets` and `tcpTargets` from `probes.*`.
 
-**Add a dashboard.** Drop `<name>.json` into `grafana/dashboards/` (needs `uid`, `title`, `schemaVersion`; `steps[0].value = null`; unit `d` not `days`; use `${DS_PROMETHEUS}` or uid `loki`; include the `prometheus_url` constant variable if you want deep-links), `git add`, then either add it to the module's default `dashboards` or enable per host with `extraDashboards = ["<name>"]`.
+**Add a dashboard.** Drop `<name>.json` into `modules/nixos/grafana/dashboards/` (needs `uid`, `title`, `schemaVersion`; `steps[0].value = null`; unit `d` not `days`; use `${DS_PROMETHEUS}` or uid `loki`; include the hidden `prometheus_url` constant variable for deep-links), `git add`, then either add it to the module's default `dashboards` or enable per host with `extraDashboards = ["<name>"]`. A value a consumer must set (like the timer list) becomes a hidden constant variable (`timers_regex` is the example) filled from a Grafana option in the `jq` step of `grafana-provision`.
 
-**Add a receiver/channel.** Set `notifications.useNtfy = false` (or add alongside), define `services.alertmanager-nixlab.receivers` and `route.routes`, put secrets in `alertmanager.env` as `KEY=value` and reference `$KEY`. Receiver names are asserted at eval time.
+**Add a receiver/channel.** Set `notifications.useNtfy = false` (or add alongside), define `services.observability-alertmanager.receivers` and `route.routes`, put secrets in the Alertmanager environment file as `KEY=value` and reference `$KEY`. Receiver names are asserted at eval time.
 
-**Add a monitored service to the fleet** (e.g. a new `servc--foo-nixlab`): expose a `/metrics`, add a stack `scrapeJob`, add alerts/runbooks, optionally a dashboard.
+**Add a monitored service to the consumer's fleet.** Expose `/metrics`, add a scrape job (host: `extraScrapeConfigs`; generally useful: a stack `scrapeJob` upstream), add alerts and runbooks, optionally a dashboard.
 
+**Add a module to this flake.**
+1. Create `modules/nixos/<name>/default.nix` registering `flake.nixosModules.servc--observability-<name>` (or `systm--…`), wrapped in `self.lib.obsLib.keyed "observability:<name>" ({config, lib, pkgs, ...}: …)`; options under `services.observability-<name>`, with an `enable`. The outer function takes `{self, ...}`.
+2. Keep it atomic: no sibling options. Cross-wiring goes in `stacks/observability.nix`, which imports it and fills its escape hatches.
+3. Port: the option's own `default` (add it to `port-defaults`). Data directory, user, uid/gid, `extraUsers` and the `*-permissions` unit follow the existing modules.
+4. Regenerate the options reference (`nix build .#options-doc -o /tmp/o && cp -L /tmp/o docs/reference/options.md`), update `docs/architecture/public-api.md` and the CHANGELOG.
+
+**Rename or remove a public name.** That is a breaking change: add a deprecation alias for one minor release, list it in `public-api.md`, and record the decision in an ADR.
 
 ---
 
@@ -714,16 +724,17 @@ nix run github:Temhr/observability/<tag>#mon-unitdiff -- <old-system> <new-syste
 
 **Option paths you will actually touch**
 ```
-services.nixlab-observability.{enable, access.{interfaces,expose}, publicHost, dataDir,
-                            prometheus.{maintenance.enable,retention,retentionSize,scrapeInterval},
-                            loki.{retention,maintenance.enable}, notifications.{ntfyAuth.enable,separateCritical,useNtfy},
-                            integrations.*, probes.*}
-services.prometheus-nixlab.{extraScrapeConfigs, maintenance.expectedMounts, maintenance.exporters.blackbox.*, maintenance.exporters.smartctl.devices}
-services.alertmanager-nixlab.{receivers, route.routes, inhibitRules, extraConfig}
-services.grafana-nixlab.{extraDashboards, allowAnonymous, provisioning.datasources}
-services.loki-nixlab.ruler.groups
-services.host-exporters-nixlab.{nodeExporter.listenAddress, smartctl.listenAddress}
-services.maintenance-log-nixlab.{logPath, textfileDir}
+services.observability.{enable, access.{interfaces,expose}, publicHost, dataDir,
+                        prometheus.{maintenance.enable,retention,retentionSize,scrapeInterval},
+                        loki.{retention,maintenance.enable}, notifications.{ntfyAuth.enable,separateCritical,useNtfy,topics},
+                        integrations.{traefik,cadvisor,postgres,nvidia}, probes.*}
+services.observability-prometheus.{extraScrapeConfigs, maintenance.expectedMounts, maintenance.alerts.features.*,
+                                   maintenance.exporters.blackbox.*, maintenance.exporters.smartctl.devices}
+services.observability-alertmanager.{receivers, route.routes, inhibitRules, extraConfig, environmentFile | secretsFile}
+services.observability-grafana.{extraDashboards, timersRegex, allowAnonymous, provisioning.datasources, credentialsFile, secretKeyFile | secretsFile}
+services.observability-loki.{ruler.groups, retentionStreams}
+services.observability-host-exporters.{nodeExporter.{enable,listenAddress,textfileDir}, smartctl.{enable,listenAddress}}
+services.observability-maintenance-log.{logPath, textfileDir, lokiJob}
 ```
 
 **Useful commands**
@@ -735,42 +746,68 @@ curl -s localhost:9090/api/v1/alerts | jq '.data.alerts[]|{alertname:.labels.ale
 curl -s localhost:9093/api/v2/alerts | jq '.[].labels.alertname'
 curl -s localhost:3100/loki/api/v1/labels
 curl -s localhost:2586/v1/health
-# validate
+# validate (in the flake's repository)
 promtool check config /data/prometheus/prometheus.yml
 nix build .#checks.x86_64-linux.prom-rule-tests
 nix flake check
-# verify
-bin/mon-check.sh ; MON_NTFY_AUTH=reader:<pw> bin/mon-check.sh --fire-test
-bin/mon-snapshot.sh /tmp/before ; # change ; bin/mon-snapshot.sh /tmp/after ; diff -ru /tmp/before /tmp/after
-bin/mon-unitdiff.sh /run/current-system ./result
+nix build .#vm-smoke                                  # needs KVM
+# verify (on a host)
+nix run github:Temhr/observability/<tag>#mon-check
+MON_NTFY_AUTH=reader:<pw> nix run github:Temhr/observability/<tag>#mon-check -- --fire-test
+nix run github:Temhr/observability/<tag>#mon-snapshot -- /tmp/before   # change; run again into /tmp/after; diff -ru /tmp/before /tmp/after
+nix run github:Temhr/observability/<tag>#mon-unitdiff -- /run/current-system ./result
 ```
 
-**Naming.** `servc--<svc>-nixlab` atomic service module · `nsops--<svc>` secrets wiring · `stack--observability` aggregator · `systm--<thing>-nixlab` cross-cutting helper modules · `flake.lib.<name>` shared functions/data consumed by name.
+**Naming.** `servc--observability-<svc>` atomic service module · `systm--observability-<thing>` supporting module · `nsops--observability-<svc>` optional secrets wiring · `stack--observability` aggregator (also `default`) · `services.observability-<x>` a module's options, `services.observability` the aggregator's · `flake.lib.<name>` shared functions/data consumed by name · deprecated 0.2 names: `…-nixlab`, `services.nixlab-observability`, `nsops--alertmanager`, `nsops--grafana` (removed in 0.4.0; mapping in `docs/architecture/public-api.md`).
 
 ---
 
 ## Appendix: illustrative host configuration
 
-*Derived from the option definitions, not copied from a host file (none were provided). Adapt names and interfaces.*
-
-<!-- TODO: update the option names below to the post-Part 5 namespace -->
+*Derived from the option definitions, not copied from a real host. Adapt names and interfaces.*
 
 ```nix
-# hosts/<host>.nix — modules = [ ... self.nixosModules.stack--observability ... ]
-services.nixlab-observability = {
-  enable = true;
-  access = {
-    interfaces = [ "eno1" ];                       # wired only
-    expose = [ "grafana" "ntfy" "prometheus" ];
-  };
-  prometheus = {
-    maintenance.enable = true;                     # loads the full alert set + exporters
-    retentionSize = "50GB";
-  };
-  loki.maintenance.enable = true;                  # maintenance-log helper + Alloy pipeline
-  notifications.ntfyAuth.enable = true;            # needs NTFY_*_PASSWORD in sops/alertmanager.env
+# flake.nix of the consumer
+inputs.observability = {
+  url = "github:Temhr/observability/<tag>";        # pin a release tag, never a branch
+  inputs.nixpkgs.follows = "nixpkgs";
 };
 
-services.prometheus-nixlab.maintenance.expectedMounts = [ "/data" ];
-services.grafana-nixlab.extraDashboards = [ "zfs-monitoring" ];   # ZFS host only
+# a host's module list
+modules = [
+  observability.nixosModules.default                              # = stack--observability
+  observability.nixosModules.nsops--observability-alertmanager    # optional: sops-nix wiring
+  observability.nixosModules.nsops--observability-grafana
+  ./my-observability.nix
+];
+```
+```nix
+# ./my-observability.nix
+{
+  services.observability = {
+    enable = true;
+    access = {
+      interfaces = [ "eno1" ];                       # only interfaces you trust (see the security note, §5.2)
+      expose = [ "grafana" "ntfy" "prometheus" ];
+    };
+    publicHost = "192.0.2.10";
+    probes.gateway = "192.0.2.1";
+    prometheus = {
+      maintenance.enable = true;                     # loads the full alert set + exporters
+      retentionSize = "50GB";
+    };
+    loki.maintenance.enable = true;                  # maintenance-log helper + Alloy pipeline
+    notifications.ntfyAuth.enable = true;            # needs NTFY_*_PASSWORD in the Alertmanager env file
+    integrations.nvidia.enable = true;               # only on hosts with the NVIDIA driver
+  };
+
+  # secrets: files the consumer owns (sops-nix; the nsops modules above wire them)
+  services.observability-alertmanager.secretsFile = ./secrets/alertmanager.env;
+  services.observability-grafana.secretsFile = ./secrets/grafana.yaml;
+
+  services.observability-prometheus.maintenance.expectedMounts = [ "/data" ];
+  services.observability-prometheus.maintenance.alerts.features.zfsMembers = true;   # ZFS host only, with the textfile metrics
+  services.observability-grafana.extraDashboards = [ "zfs-monitoring" ];            # ZFS host only
+  services.observability-grafana.timersRegex = "nixos-upgrade.timer|nix-gc.timer|backup.timer";
+}
 ```
